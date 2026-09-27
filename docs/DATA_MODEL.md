@@ -19,7 +19,7 @@ Modelo para construir el backend desde cero, conforme a [SPEC.md](SPEC.md). Desc
 
 ### 1. `user_settings`
 
-**Propósito:** configuración financiera personal y fila estable para serializar las operaciones monetarias de un usuario.
+**Propósito:** configuración financiera personal. La serialización por usuario usa el bloqueo común descrito más abajo, disponible incluso antes de crear esta fila.
 
 **PK y relación:** `user_id uuid`, FK a `auth.users(id)`; una fila por usuario.
 
@@ -185,6 +185,10 @@ Cada transferencia tiene una única fila y sus efectos se aplican atómicamente.
 
 Solo se persisten operaciones completadas, en la misma transacción que sus cambios financieros. Un fallo revierte tanto los cambios como su registro; no hace falta un estado «pendiente». Las filas confirmadas son inmutables y no se borran al borrar movimientos.
 
+En 003, `create_first_period` y `create_savings_account` reciben `p_request_id uuid`, almacenado como `idempotency_key`. Tras adquirir el bloqueo común, normalizan los importes a `numeric(20,2)` sin redondear entradas inválidas y los nombres con `btrim`. El helper privado `financial_request_hash` calcula SHA-256 nativo de PostgreSQL sobre JSONB con el tipo de operación y sus parámetros normalizados. No incluye la fecha actual ni valores derivados de la configuración que puedan cambiar entre reintentos.
+
+Si la clave ya existe, se comparan tipo y huella: una petición distinta falla; la misma devuelve la instantánea JSONB de la fila creada, guardada en `result`, sin repetir efectos ni reevaluar reglas temporales. La respuesta sigue siendo la original aunque después se renombre la cuenta. La creación, el bloqueo de moneda y el registro se confirman en la misma transacción. Al establecer `currency_locked_at` por primera vez, también se incrementan la versión y el timestamp de configuración; un retry no los modifica.
+
 ## Saldos y validaciones transaccionales
 
 El disponible se calcula con la fórmula de la especificación dentro de su período. El ahorro se calcula por cuenta a lo largo del tiempo, sin reiniciarse al cambiar de período. No hacen falta tablas adicionales de balances, asientos duplicados ni resúmenes diarios.
@@ -197,7 +201,9 @@ Las siguientes operaciones necesitarán RPC/transacciones seguras posteriormente
 - Cerrar un período y abrir el siguiente: validar límites y movimientos existentes, calcular y guardar el saldo final, cerrar el anterior y copiar automáticamente el arrastre. Todo se confirma junto; no hay dos períodos abiertos transitoriamente para otras peticiones.
 - Cambiar presupuestos: comprobar dentro de la transacción que el período sigue abierto.
 
-Para v1 se propone serializar las mutaciones financieras por usuario bloqueando su fila de `user_settings`. Así, peticiones simultáneas, cierres, cambios de configuración y validaciones de saldo usan un estado coherente. Las acciones monetarias y la apertura/cierre usan además `financial_operations`: se comprueba la clave bajo ese bloqueo antes de aplicar los efectos. La unicidad es una protección adicional contra duplicados.
+Desde 003, `private.lock_current_user()` obtiene `auth.uid()`, rechaza sesiones sin usuario y adquiere un advisory lock transaccional mediante `pg_advisory_xact_lock(hashtextextended(uuid::text, 0))`. No recibe un propietario del cliente ni requiere que exista `user_settings`; se libera automáticamente al terminar la transacción. Una colisión del hash solo serializa usuarios independientes, sin mezclar sus datos. El helper no es ejecutable por `anon` ni `authenticated`.
+
+Las siete RPC mutantes de 002 se reemplazan en 003 para usar este mismo bloqueo como primera acción, manteniendo sus contratos. También lo usan todas las RPC de períodos y ahorro de 003; las futuras mutaciones financieras deberán seguir el mismo mecanismo. Las creaciones consultan `financial_operations` bajo el bloqueo antes de aplicar efectos; la unicidad de la clave por usuario es una protección adicional contra duplicados.
 
 001 habilita RLS en las diez tablas, sin policies: quedan cerradas por defecto para los roles sujetos a RLS hasta la siguiente migración de seguridad/API. La implementación posterior deberá impedir escrituras directas que eludan las validaciones transaccionales, obtener el usuario autenticado en el backend y verificar también sus referencias. Aquí no se definen políticas ni funciones SQL.
 
