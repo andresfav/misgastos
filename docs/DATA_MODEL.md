@@ -338,3 +338,66 @@ requieren READ COMMITTED. `private.open_budget_period` comprueba aislamiento y
 período propio abierto bajo ese lock. Se mantienen RLS de lectura propia, DML
 directo prohibido y journal privado; helpers sin EXECUTE para PUBLIC, anon ni
 authenticated y RPC públicas con EXECUTE explícito solo para authenticated.
+
+## API derivada de lectura en 006
+
+006 añade cuatro RPC `STABLE`, `SECURITY DEFINER`, con `search_path` vacío,
+identidad derivada de `auth.uid()` y ownership explícito en todas las consultas.
+No reciben user_id, no toman advisory locks, no escriben datos ni journal y no
+incrementan versiones. Se mantienen las lecturas de filas mediante RLS: estas
+RPC solo devuelven cálculos derivados. Todos los resultados son JSONB, con
+importes calculados como numeric, sin float ni porcentajes.
+
+`private.read_today()` exige sesión (`28000`) y configuración (`P0002`). Usa
+`statement_timestamp()` en la timezone configurada: el día queda fijo durante
+la llamada, sin depender de la timezone del servidor ni del inicio de una
+transacción larga. Todas las RPC de esta capa requieren configuración.
+
+- `get_current_financial_state()` devuelve `as_of_date`, `current_period`,
+  disponible, ingresos externos separados por destino, gastos, transferencias
+  hacia/desde disponible y presupuesto general con gasto y remanente. Incluye
+  `savings_balances`. Sin período abierto, los campos del período y sus totales
+  son NULL; el ahorro existente sigue apareciendo. Con período vacío, sus
+  totales son cero y available es opening_balance.
+- `get_savings_balances()` devuelve un array, vacío si no hay cuentas. Incluye
+  activas e inactivas con id, nombre, fecha inicial, saldo inicial, estado,
+  versión y current_balance. `private.savings_balances_at(date)` agrega de una
+  vez todos los ingresos directos, transferencias recibidas y enviadas hasta
+  el día local, a través de todos los períodos. Suma el saldo inicial incluso
+  sin movimientos. Orden: activas primero, lower(btrim(name)), id. No reutiliza
+  `check_savings`: ese helper valida una historia diaria y no devuelve saldos.
+- `get_period_summary(period_id)` usa `private.period_summary_at(period_id,
+  today)`, compartido con el estado actual. Devuelve `period` y los mismos
+  totales al día local para open o al end_date para closed. Incluye tanto
+  opening_balance como closing_balance almacenado y available derivado.
+  No sustituye ni corrige un cierre almacenado distinto del cálculo; ambos
+  valores permiten detectar la incoherencia. UUID ajeno, inexistente o NULL
+  produce `P0002` sin revelar datos. Solo las transferencias entre disponible
+  y ahorro cuentan en transfer_to_savings_total/transfer_from_savings_total.
+- `get_category_budget_usage(period_id)` devuelve un array con la unión de
+  categorías presupuestadas o con gasto, incluyendo categorías inactivas.
+  Cada objeto contiene category_id/name/is_active, budget_id/amount/version,
+  spent y remaining. Sin presupuesto, sus campos y remaining son NULL; sin
+  gasto, spent es cero. Orden: spent descendente, nombre normalizado, id.
+  Categorías sin gasto ni presupuesto no aparecen. También valida ownership.
+
+Los presupuestos no alteran available: general_budget_spent es expenses_total
+y remaining es presupuesto menos gasto; NULL conserva ausencia de límite,
+cero es válido y los remanentes negativos se muestran sin restringir el gasto.
+No hay índices, tablas, vistas materializadas ni saldos persistidos nuevos.
+
+### Snapshot compartido y reutilización del disponible
+
+006 cambia **solo el atributo de volatilidad** de `private.available_daily` y
+`private.available_at` a STABLE, conservando sus cuerpos, firmas y ACL. Ambos
+son exclusivamente SELECT. Esto es necesario para reutilizar la fórmula de 005
+sin que un helper VOLATILE adquiera un snapshot posterior dentro de una lectura
+compuesta. Toda la cadena de lecturas es STABLE y usa el snapshot de la sentencia.
+Véase la [semántica de volatilidad de PostgreSQL](https://www.postgresql.org/docs/current/xfunc-volatility.html).
+
+Los archivos 001–005 permanecen intactos. Las RPC mutantes y `check_available`
+siguen VOLATILE: después del bloqueo y del DML provisional ejecutan otra consulta.
+Los helpers STABLE heredan el snapshot de **esa consulta posterior**, que ya ve
+sus cambios, no el snapshot de entrada de la RPC mutante. No se cambia el lock,
+el aislamiento requerido ni la fórmula de validación. El smoke 006 incluye create/update/delete y rechazos por saldo insuficiente para
+comprobar esta integración, además de cierres positivos y negativos mediante 005.
