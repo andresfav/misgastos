@@ -33,10 +33,39 @@ export function friendlyError(error: unknown): string {
     case "22003":
       return "El importe es demasiado grande. Usa como máximo 18 cifras enteras y dos decimales.";
     case "40001":
-      return "Los datos han cambiado. Recarga la página para ver la versión actual.";
+      return "Los datos han cambiado. Revisa la versión actual antes de volver a guardar.";
+    case "23505":
+      return "Ya existe ese nombre. Comprueba también los elementos inactivos o elige otro.";
     case "P0002":
       return "No se ha encontrado la configuración necesaria. Recarga para continuar.";
     default:
       return "No se pudo completar la operación. Comprueba tu conexión y vuelve a intentarlo.";
   }
+}
+
+export function movementError(error: unknown): string {
+  const value = error as { code?: string; message?: string };
+  // Traducciones controladas: nunca devolver el mensaje técnico al usuario.
+  if (value?.code === "22023" || value?.code === "P0002") {
+    if (import.meta.env.DEV) console.error("[MisGastos]", error);
+    const message = value.message || "";
+    if (/período/i.test(message))
+      return "La fecha debe pertenecer al período abierto. Los movimientos de períodos cerrados no se pueden editar ni borrar.";
+    if (/insuficiente|negativo/i.test(message))
+      return "El cambio dejaría un saldo insuficiente en alguna fecha afectada. Revisa el importe y los movimientos posteriores.";
+    if (/Categoría/i.test(message))
+      return "La categoría ya no está disponible. Actualiza y selecciona una categoría activa.";
+    if (/Método/i.test(message))
+      return "El método de pago ya no está disponible. Actualiza y elige otro o deja el campo vacío.";
+    if (/Cuenta/i.test(message))
+      return "Revisa las cuentas de ahorro: deben estar disponibles y existir en la fecha elegida.";
+    if (/Movimiento no encontrado/i.test(message))
+      return "Este movimiento ya no existe. Actualiza la lista.";
+    return "Revisa el importe, la fecha y el origen y destino del movimiento.";
+  }
+  return friendlyError(error);
+}
+
+export function isStaleData(error: unknown) {
+  return ["40001", "P0002"].includes((error as { code?: string })?.code || "");
 }

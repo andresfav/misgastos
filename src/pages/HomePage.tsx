@@ -1,36 +1,13 @@
-import { useEffect, useState } from "react";
+import { useRemote } from "../hooks/useRemote";
 import { readFinancialState } from "../lib/finance";
-import { friendlyError } from "../lib/errors";
 import { formatMoney } from "../lib/money";
 import { formatDate } from "../lib/dates";
 import { useSetup } from "../hooks/useSetup";
 import { ErrorMessage, Loading } from "../components/Feedback";
-import type { FinancialState } from "../types/finance";
 
 export function HomePage() {
   const { settings } = useSetup();
-  const [data, setData] = useState<FinancialState | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [revision, setRevision] = useState(0);
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError("");
-    void readFinancialState()
-      .then((next) => {
-        if (active) setData(next);
-      })
-      .catch((failure) => {
-        if (active) setError(friendlyError(failure));
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [revision]);
+  const { data, error, loading, reload } = useRemote(readFinancialState);
   const money = (value: number | string | null) =>
     formatMoney(value, settings!.currency);
   return (
@@ -44,7 +21,7 @@ export function HomePage() {
         <button
           className="button-secondary"
           disabled={loading}
-          onClick={() => setRevision((r) => r + 1)}
+          onClick={reload}
         >
           {loading ? "Cargando…" : "Actualizar"}
         </button>

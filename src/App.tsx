@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { SetupProvider, useSetup } from "./hooks/useSetup";
@@ -5,9 +6,28 @@ import { configurationError } from "./lib/supabase";
 import { ErrorMessage, Loading } from "./components/Feedback";
 import { LogoutButton, Shell } from "./components/Shell";
 import { AuthPage } from "./pages/AuthPage";
-import { OnboardingPage } from "./pages/OnboardingPage";
 import { HomePage } from "./pages/HomePage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+
+const AddPage = lazy(() =>
+  import("./pages/AddPage").then((module) => ({ default: module.AddPage })),
+);
+const MovementsPage = lazy(() =>
+  import("./pages/MovementsPage").then((module) => ({
+    default: module.MovementsPage,
+  })),
+);
+const SettingsPage = lazy(() =>
+  import("./pages/SettingsPage").then((module) => ({
+    default: module.SettingsPage,
+  })),
+);
+
+const OnboardingPage = lazy(() =>
+  import("./pages/OnboardingPage").then((module) => ({
+    default: module.OnboardingPage,
+  })),
+);
 
 function PrivateRoutes() {
   const { session, loading } = useAuth();
@@ -68,13 +88,10 @@ function AppRoutes() {
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route element={<ReadyRoutes />}>
           <Route index element={<HomePage />} />
-          <Route
-            path="/movimientos"
-            element={<PlaceholderPage page="movimientos" />}
-          />
-          <Route path="/anadir" element={<PlaceholderPage page="anadir" />} />
+          <Route path="/movimientos" element={<MovementsPage />} />
+          <Route path="/anadir" element={<AddPage />} />
           <Route path="/ahorro" element={<PlaceholderPage page="ahorro" />} />
-          <Route path="/ajustes" element={<PlaceholderPage page="ajustes" />} />
+          <Route path="/ajustes" element={<SettingsPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -95,7 +112,9 @@ export default function App() {
     );
   return (
     <AuthProvider>
-      <AppRoutes />
+      <Suspense fallback={<Loading />}>
+        <AppRoutes />
+      </Suspense>
     </AuthProvider>
   );
 }

@@ -52,8 +52,22 @@ Referencia del flujo de recovery: [Supabase Auth](https://supabase.com/docs/refe
 
 Se incluyen iconos **provisionales** propios (M geométrica) de 192 y 512 px; queda pendiente la identidad visual final y un icono maskable. HTTPS es necesario fuera de localhost. Los requisitos de instalación dependen del navegador. Base de configuración: [Vite PWA](https://vite-pwa-org.netlify.app/guide/service-worker-strategies-and-behaviors).
 
+## Movimientos, Añadir y catálogos
+
+Movimientos consulta `expenses`, `incomes` y `transfers` mediante SELECT con RLS. Muestra hasta 100 filas recientes por tipo, ordenadas conjuntamente por fecha descendente, `created_at` descendente e ID como último desempate, con filtros por tipo. Los catálogos y los períodos se consultan completos en lotes de 500. Se conservan los nombres de las referencias inactivas en el historial.
+
+Añadir crea gastos, ingresos y transferencias con las firmas de 004. Los importes viajan como texto decimal positivo, con máximo dos decimales. Las lecturas de movimientos solicitan `amount::text` mediante la [selección de columnas de PostgREST](https://postgrest.org/en/v12/references/api/tables_views.html#casting-columns), para conservar exactamente el importe al editar, sin cambios de SQL ni de backend. La fecha inicial usa la zona horaria configurada; se rechazan fechas futuras y fuera del período abierto. Los movimientos se editan mediante las RPC `update_*` y se borran, tras confirmación, con `delete_*`; siempre se envía la versión real de la fila. No se envía `user_id` ni `period_id` a estas RPC.
+
+Cada intento de create/update/delete tiene un UUID propio asociado a sus parámetros, conservado en memoria y `sessionStorage` hasta confirmar éxito. Un reintento idéntico mantiene ese UUID, incluso al volver a abrir el formulario e introducir los mismos datos. Cambiar parámetros o terminar con éxito inicia otro intento. Si el almacenamiento está bloqueado, la persistencia dura mientras el formulario permanezca montado. Los formularios se limpian tras éxito; no se borra su contenido al fallar una petición de guardado normal.
+
+Los períodos cerrados son de solo lectura. Ante una versión obsoleta se avisa, se cierra la edición pendiente y se vuelve a consultar la lista antes de otro intento. Las referencias inactivas solo se pueden conservar en el campo original de una edición, tal como permite 004; no se ofrecen para movimientos nuevos. El backend sigue validando los saldos, incluidas todas las fechas afectadas por una corrección o borrado.
+
+Ajustes permite crear, renombrar, desactivar y restaurar categorías y métodos de pago usando las RPC de 003, sin borrados físicos. Los cambios de filas existentes envían `p_expected_version`. Los nombres duplicados y conflictos tienen mensajes comprensibles.
+
+Cada página carga al entrar. Un evento local sencillo (`misgastos:data-changed`) invalida las lecturas montadas después de una mutación; Inicio vuelve a consultar su RPC y no reconstruye saldos. No hay caché global ni suscripciones Realtime.
+
 ## Siguiente bloque
 
-Implementar listas y formularios reales de movimientos, altas de ahorro, gestión de períodos, categorías, métodos de pago y edición de ajustes. Las rutas Movimientos, Añadir, Ahorro y Ajustes son placeholders explícitos; Ajustes ya muestra la configuración actual. No se ha añadido el reset financiero a la UI.
+Altas y gestión de ahorro, gestión de períodos, paginación para consultar más de 100 movimientos por tipo y edición de preferencias personales. Ahorro sigue siendo un placeholder explícito; los ingresos a Disponible se pueden utilizar sin cuentas de ahorro. No se ha añadido el reset financiero a la UI.
 
 Con un proyecto de pruebas configurado, comprobar manualmente registro/confirmación, login/logout, recovery, sesión caducada, onboarding interrumpido y cada tipo de período, y contrastar Inicio con las RPC. El build por sí solo no verifica correos ni conectividad con un proyecto Supabase.
