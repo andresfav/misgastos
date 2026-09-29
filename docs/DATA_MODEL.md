@@ -220,3 +220,53 @@ Se proponen exactamente las diez tablas anteriores. El presupuesto general resid
 No se añaden tablas para comercios, notas, recurrencias automáticas, monedas, tipos de período ni perfiles que dupliquen Auth. Tampoco hace falta un libro mayor adicional: gastos, ingresos y transferencias son la fuente de los movimientos; solo el cierre de período conserva un saldo final.
 
 La futura opción «Empezar de cero» no necesita tabla propia. Deberá borrar transaccionalmente los datos financieros del usuario, incluido su registro de operaciones, conservar `auth.users` y permitir reiniciar la configuración financiera bloqueada. Su implementación sigue fuera de v1.
+
+## Semántica temporal implementada en 004
+
+004 añade creación, edición y borrado de gastos, ingresos y transferencias. El
+cliente envía fechas `date`, nunca `period_id`: el servidor obtiene el único
+período `open`, comprueba sus límites inclusivos y el día local del usuario. Una
+edición conserva el período original. Los importes se validan antes de convertir
+a `numeric(20,2)`, sin redondeo y sin valores no finitos.
+
+Cada fecha se interpreta como un **cierre diario neto**, sin orden intradía por
+UUID, creación o actualización. El disponible al cierre de D es el saldo inicial
+del período, más ingresos a disponible y transferencias ahorro → disponible con
+fecha ≤ D, menos gastos y transferencias disponible → ahorro con fecha ≤ D.
+Solo se exige disponible ≥ 0 en fechas que contienen al menos una transferencia
+disponible → ahorro. En el mismo día, todos los movimientos se compensan; un
+ingreso de un día posterior nunca financia una transferencia anterior. Un gasto
+posterior sí puede dejar negativo el disponible. Un gasto del mismo día que una
+transferencia a ahorro se rechaza si hace negativo ese cierre diario.
+
+El ahorro al cierre de D suma opening_balance, ingresos directos y transferencias
+recibidas hasta D, menos transferencias enviadas hasta D, incluyendo todos los
+períodos. Se exige no negatividad en todas las fechas afectadas. No se almacenan
+balances diarios ni saldo actual. Los días sin movimientos conservan su saldo.
+
+Después de aplicar provisionalmente la mutación se recalculan acumulados sobre
+el historial completo; solo se filtran los cierres a comprobar **después** de
+calcular la ventana. Para disponible se empieza por la menor fecha original/nueva;
+para ahorro se agrupan las cuentas de ambas versiones del movimiento y se usa la
+menor fecha afectada de cada cuenta. Se incluye esa fecha incluso si se borró su
+último movimiento. Cualquier violación aborta movimiento, versión, timestamp y
+registro de idempotencia. Así, con opening 100, transferir 80 el día 1 y gastar 50
+el día 2 es válido; transferir 120 el día 1 no se rescata con un ingreso el día 2.
+
+Las nueve RPC adquieren primero `private.lock_current_user()`. Bajo ese bloqueo,
+la huella SHA-256 de 003 incluye todos los campos de la petición y, para editar o
+borrar, id y expected_version. Se normaliza amount; los textos se conservan
+exactamente (NULL y texto vacío son distintos). El retry precede a la búsqueda
+de la fila y a las reglas dependientes del estado: devuelve el JSONB original
+aunque la fila se haya editado/borrado. Create/update devuelven la fila; delete
+retorna `{"deleted": true, "movement": <fila anterior>}`. Las referencias inactivas
+solo pueden conservarse en el mismo campo; intercambiar extremos de una
+transferencia constituye nuevas asignaciones.
+
+Las RPC 004 requieren READ COMMITTED y rechazan otros niveles con `25001`.
+Esto asegura que las consultas VOLATILE posteriores a la espera del advisory
+lock puedan ver el commit anterior; un snapshot fijado antes del bloqueo sería
+insuficiente para proteger las sumas. El lock dura hasta terminar la transacción.
+Los helpers tienen search_path vacío y no son ejecutables por PUBLIC, anon ni
+authenticated; se mantienen las políticas de lectura propia y la prohibición de
+DML directo de 002. No se implementan transiciones de período ni presupuestos.
