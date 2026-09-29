@@ -269,4 +269,72 @@ lock puedan ver el commit anterior; un snapshot fijado antes del bloqueo sería
 insuficiente para proteger las sumas. El lock dura hasta terminar la transacción.
 Los helpers tienen search_path vacío y no son ejecutables por PUBLIC, anon ni
 authenticated; se mantienen las políticas de lectura propia y la prohibición de
-DML directo de 002. No se implementan transiciones de período ni presupuestos.
+DML directo de 002. Las transiciones de período y presupuestos se añaden en 005.
+
+
+## Transiciones y presupuestos implementados en 005
+
+`advance_period(current_period_id, expected_version, mode, start_date, end_date,
+request_id, general_budget DEFAULT NULL)` cierra y abre en una sola transacción.
+No recibe saldo inicial nuevo. Devuelve `{"closed_period": <fila>,
+"opened_period": <fila>}` y registra esa instantánea en `financial_operations`.
+Primero adquiere el lock común; después valida la clave y huella, antes de
+consultar el período actual o el día local. Un retry exacto conserva su respuesta
+incluso después del cierre; cambiar cualquier parámetro, incluida la versión,
+con la misma clave produce `22023`. La versión obsoleta produce `40001`; un
+período ajeno, inexistente o cerrado produce `P0002` en la API de presupuestos y
+transiciones. Solo hay una firma de cada RPC.
+
+El nuevo período debe contener hoy según la timezone del usuario: mes/año
+natural actual, custom con ambas fechas o between_paydays con inicio no futuro
+y final NULL. El **modo anterior** determina el cierre: si era between_paydays,
+su final pasa a `new_start - 1`; si tenía fechas fijas, conserva su final. Se
+permiten huecos, sin generar períodos vacíos. Se rechaza cualquier movimiento
+que quedaría fuera del período anterior; no se trasladan movimientos. No se
+permite insertar un período antes de historia ya existente.
+
+El cierre usa exclusivamente disponible: saldo inicial + ingresos a disponible
++ transferencias ahorro → disponible − transferencias disponible → ahorro −
+gastos. Excluye ingresos directos a ahorro, transferencias entre ahorros y todos
+los presupuestos. `private.available_daily` centraliza esta fórmula y el neto
+por DATE; 005 reemplaza `private.check_available` para consumirla, conservando
+las reglas de 004. `private.available_at` toma el último cierre diario hasta la
+fecha pedida, incluyendo el saldo inicial cuando no hay movimientos. Los
+archivos 001–004 no cambian. Un cierre fuera del rango de numeric(20,2) se
+rechaza sin efectos.
+
+El cierre incrementa versión y updated_at, fija closed_at y guarda closing_balance.
+El nuevo período tiene versión 1 y exactamente ese saldo inicial, incluso
+negativo; no genera ningún ingreso ni transferencia. No hay reapertura ni
+mutación de períodos cerrados mediante estas RPC. Los retries financieros
+siguen devolviendo resultados históricos sin ejecutar nuevas mutaciones.
+
+`set_general_budget(period_id, general_budget, expected_version)` admite NULL
+para quitar el límite, cero o positivo. `create_category_budget(period_id,
+category_id, amount)`, `update_category_budget(id, expected_version, amount)` y
+`delete_category_budget(id, expected_version)` requieren un período propio
+abierto. Crear exige categoría activa; actualizar o borrar permite conservar
+una categoría desactivada. No se cambian category_id ni period_id al actualizar.
+Crear/actualizar devuelven la fila; borrar devuelve `{"deleted": true,
+"budget": <fila anterior>}` y elimina físicamente esa fila. La unicidad de
+categoría/período rechaza duplicados con `23505`. Actualizar incrementa versión
+y updated_at; borrar valida expected_version antes de eliminar.
+
+Los presupuestos son planificación: no alteran saldos ni movimientos, no se
+registran en financial_operations y gastar por encima de ellos está permitido.
+El general y los de categoría son independientes, sin obligación de que sumen
+lo mismo. No se arrastra presupuesto sin usar ni se copia al siguiente período.
+El general nuevo solo se establece si se envía; NULL significa sin límite.
+`private.budget_amount` valida precisión, finitud, rango y no negatividad antes
+del cast; el importe por categoría nunca admite NULL.
+
+Las cinco RPC adquieren `private.lock_current_user()` como primera acción y
+requieren READ COMMITTED. `private.open_budget_period` comprueba aislamiento y
+período propio abierto bajo ese lock. Se mantienen RLS de lectura propia, DML
+directo prohibido y journal privado; helpers sin EXECUTE para PUBLIC, anon ni
+authenticated y RPC públicas con EXECUTE explícito solo para authenticated.
+Las cinco RPC adquieren `private.lock_current_user()` como primera acción y
+requieren READ COMMITTED. `private.open_budget_period` comprueba aislamiento y
+período propio abierto bajo ese lock. Se mantienen RLS de lectura propia, DML
+directo prohibido y journal privado; helpers sin EXECUTE para PUBLIC, anon ni
+authenticated y RPC públicas con EXECUTE explícito solo para authenticated.
