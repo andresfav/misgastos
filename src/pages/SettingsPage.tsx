@@ -1,14 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, type ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
-import { useRemote } from "../hooks/useRemote";
-import { readReferences } from "../lib/movements";
-import { CatalogManager } from "../components/CatalogManager";
-import { ErrorMessage, Loading } from "../components/Feedback";
-import { AccountSettings } from "../components/AccountSettings";
-import { PreferencesSettings } from "../components/PreferencesSettings";
-import { ResetFinancialData } from "../components/ResetFinancialData";
+import { Loading } from "../components/Feedback";
 import { AppSignature } from "../components/AppSignature";
-import type { CatalogKind } from "../types/movements";
+
+const AccountSettings = lazy(() => import("../components/AccountSettings").then((module) => ({ default: module.AccountSettings })));
+const PreferencesSettings = lazy(() => import("../components/PreferencesSettings").then((module) => ({ default: module.PreferencesSettings })));
+const CatalogSettings = lazy(() => import("../components/CatalogSettings").then((module) => ({ default: module.CatalogSettings })));
+const ResetFinancialData = lazy(() => import("../components/ResetFinancialData").then((module) => ({ default: module.ResetFinancialData })));
 
 const sections = [
   ["cuenta", "Cuenta", "Email, contraseña y sesión"],
@@ -28,23 +26,8 @@ function SettingsView({ title, children }: { title: string; children: ReactNode 
   return <div className="settings-page">
     <Link className="settings-back" to="/ajustes">← Ajustes</Link>
     <h1 ref={heading} tabIndex={-1}>{title}</h1>
-    {children}
+    <Suspense fallback={<Loading text="Cargando…" />}>{children}</Suspense>
   </div>;
-}
-
-function CatalogSettings({ kind }: { kind: CatalogKind }) {
-  const { data, error, loading, reload } = useRemote(readReferences);
-  const [message, setMessage] = useState("");
-  return <>
-    {message && <p className="notice success" role="status">{message}</p>}
-    <ErrorMessage message={error} />
-    {error && <button onClick={reload} disabled={loading}>Reintentar</button>}
-    {loading && !data && <Loading />}
-    {data && <fieldset className="catalog-loading" disabled={loading || !!error} aria-busy={loading}>
-      {loading && <Loading text="Actualizando…" />}
-      <CatalogManager kind={kind} items={kind === "category" ? data.categories : data.methods} onMessage={setMessage} />
-    </fieldset>}
-  </>;
 }
 
 export function SettingsPage() {
