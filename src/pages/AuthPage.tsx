@@ -4,6 +4,7 @@ import { client } from "../lib/supabase";
 import { useAuth } from "../hooks/useAuth";
 import { useSubmit } from "../hooks/useSubmit";
 import { ErrorMessage, Loading } from "../components/Feedback";
+import { AppSignature } from "../components/AppSignature";
 
 type Mode = "login" | "register" | "forgot" | "reset";
 const titles: Record<Mode, string> = {
@@ -78,6 +79,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
     });
   };
   return (
+    <>
     <main className="auth-layout">
       <section className="auth-intro">
         <Link className="brand" to="/">
@@ -204,5 +206,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
         </div>
       </section>
     </main>
+    {(mode === "login" || mode === "register") && <AppSignature />}
+    </>
   );
 }

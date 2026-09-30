@@ -2,12 +2,13 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useSubmit } from "../hooks/useSubmit";
 import { ErrorMessage } from "./Feedback";
+import { NavIcon } from "./NavIcon";
 const links = [
-  ["/", "Inicio", "⌂"],
-  ["/movimientos", "Movimientos", "↔"],
-  ["/anadir", "Añadir", "+"],
-  ["/ahorro", "Ahorro", "◇"],
-  ["/ajustes", "Ajustes", "⚙"],
+  ["/", "Inicio"],
+  ["/movimientos", "Movimientos"],
+  ["/anadir", "Añadir"],
+  ["/ahorro", "Ahorro"],
+  ["/ajustes", "Ajustes"],
 ];
 export function LogoutButton() {
   const { logout } = useAuth();
@@ -35,17 +36,17 @@ export function Shell() {
         <NavLink className="brand" to="/">
           <span className="brand-mark">M</span>MisGastos
         </NavLink>
-        <LogoutButton />
       </header>
       <nav className="navigation" aria-label="Navegación principal">
-        {links.map(([to, title, symbol]) => (
-          <NavLink key={to} to={to} end={to === "/"}>
-            <span aria-hidden="true">{symbol}</span>
+        {links.map(([to, title]) => (
+          <NavLink key={to} to={to} end={to === "/"}
+            className={({ isActive }) => [isActive ? "active" : "", to === "/anadir" ? "nav-add" : ""].join(" ")}>
+            <span className="nav-icon"><NavIcon name={to} /></span>
             {title}
           </NavLink>
         ))}
       </nav>
-      <main id="main" className="main-content">
+      <main id="main" className="main-content" tabIndex={-1}>
         <Outlet />
       </main>
     </div>

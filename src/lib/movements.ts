@@ -79,6 +79,14 @@ export async function readMovements() {
   );
   return sortMovements(groups.flat());
 }
+export async function readMovementForEdit(kind: MovementKind, id: string) {
+  const [result, refs] = await Promise.all([
+    client().from(tables[kind]).select(columns[kind]).eq("id", id).maybeSingle(),
+    readReferences(),
+  ]);
+  if (result.error) throw result.error;
+  return { row: result.data ? { ...(result.data as unknown as Omit<Movement, "kind">), kind } as Movement : null, refs };
+}
 export async function readMovementScreen() {
   const [rows, refs] = await Promise.all([readMovements(), readReferences()]);
   return { rows, refs };

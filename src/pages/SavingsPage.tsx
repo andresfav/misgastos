@@ -1,4 +1,6 @@
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { sumAmounts } from "../lib/home";
 import { ErrorMessage, Loading } from "../components/Feedback";
 import { MovementForm } from "../components/MovementForm";
 import { useRemote } from "../hooks/useRemote";
@@ -70,14 +72,14 @@ function History({ account, accounts }: { account: SavingsAccount; accounts: Sav
   const { data, loading, error, reload } = useRemote(load);
   const name = (id: string | null) => id === null ? "Disponible" : accounts.find((a) => a.id === id)?.name || "Cuenta de ahorro";
   return <section className="savings-detail" aria-label={`Historial de ${account.name}`}>
-    <h3>Historial</h3>
+    <h2>Movimientos</h2>
     <ErrorMessage message={error} />
     {error && <button onClick={reload}>Reintentar historial</button>}
     {loading ? <Loading text="Cargando historial…" /> : !error && data && (
       data.length ? <ul className="movement-list">{data.map((row) => <li key={`${row.kind}:${row.id}`} className="savings-history-row">
         <div className="movement-heading">
           <div><span className={`movement-type ${row.kind}`}>{row.kind === "income" ? "Ingreso directo" : row.kind === "transfer" && row.to_savings_account_id === account.id ? "Transferencia recibida" : "Transferencia enviada"}</span><time dateTime={row.date}>{formatDate(row.date)}</time></div>
-          <strong>{formatMoney(row.amount, settings!.currency)}</strong>
+          <strong>{row.kind === "transfer" && row.from_savings_account_id === account.id ? "−" : "+"}{formatMoney(row.amount, settings!.currency)}</strong>
         </div>
         <div className="movement-details">
           {row.description && <span>{row.description}</span>}
@@ -105,11 +107,10 @@ function QuickTransfer({ account, action, onClose, onSaved }: { account: Savings
   </section>;
 }
 
-function AccountCard({ account, accounts, onMessage }: { account: SavingsAccount; accounts: SavingsAccount[]; onMessage: (message: string) => void }) {
+function AccountDetail({ account, accounts, onMessage }: { account: SavingsAccount; accounts: SavingsAccount[]; onMessage: (message: string) => void }) {
   const { settings } = useSetup();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(account.name);
-  const [history, setHistory] = useState(false);
   const [action, setAction] = useState<QuickAction | null>(null);
   const { busy, error, setError, submit } = useSubmit(savingsError);
   const mutate = (rename: boolean) => {
@@ -129,46 +130,86 @@ function AccountCard({ account, accounts, onMessage }: { account: SavingsAccount
       refreshFinancialData();
     });
   };
-  return <article className="card savings-account">
-    <div className="catalog-name"><h2>{account.name}</h2><span className="badge">{account.is_active ? "Activa" : "Inactiva"}</span></div>
-    <dl className="savings-facts">
-      <div><dt>Saldo actual</dt><dd className="savings-balance">{formatMoney(account.current_balance, settings!.currency)}</dd></div>
-      <div><dt>Saldo inicial</dt><dd>{formatMoney(account.opening_balance, settings!.currency)}</dd></div>
-      <div><dt>Fecha de inicio</dt><dd>{formatDate(account.start_date)}</dd></div>
-    </dl>
+  return <article className="savings-account">
+    <header className="savings-account-heading">
+      <h1>{account.name}</h1>
+      <p className="savings-balance">{formatMoney(account.current_balance, settings!.currency)}</p>
+    </header>
+    {account.is_active && <div className="savings-quick-actions">
+      <button disabled={busy || editing || action !== null} onClick={() => setAction("add")}>Añadir dinero</button>
+      <button className="button-secondary" disabled={busy || editing || action !== null} onClick={() => setAction("withdraw")}>Retirar</button>
+      <button className="button-secondary" disabled={busy || editing || action !== null || !accounts.some((a) => a.is_active && a.id !== account.id)} onClick={() => setAction("move")}>Mover</button>
+    </div>}
+    {action && account.is_active && <QuickTransfer key={action} account={account} action={action} onClose={() => setAction(null)} onSaved={() => { setAction(null); onMessage("Transferencia guardada correctamente."); }} />}
     {!account.is_active && <p className="notice">Conserva su saldo e historial. Restáurala para registrar nuevos movimientos.</p>}
-    <ErrorMessage message={error} />
-    {editing ? <form onSubmit={(e) => { e.preventDefault(); mutate(true); }}><fieldset disabled={busy}>
-      <label>Nuevo nombre<input autoFocus required value={name} onChange={(e) => setName(e.target.value)} /></label>
-      <div className="form-actions"><button type="submit">{busy ? "Guardando…" : "Guardar nombre"}</button><button type="button" className="button-secondary" onClick={() => setEditing(false)}>Cancelar</button></div>
-    </fieldset></form> : <div className="form-actions">
-      <button className="button-secondary" disabled={busy || action !== null} onClick={() => setEditing(true)}>Renombrar</button>
-      <button className="button-secondary" disabled={busy || action !== null} onClick={() => mutate(false)}>{busy ? "Guardando…" : account.is_active ? "Desactivar" : "Restaurar"}</button>
-      <button className="button-secondary" disabled={busy} aria-expanded={history} onClick={() => setHistory(!history)}>{history ? "Ocultar historial" : "Ver detalle / historial"}</button>
-    </div>}
-    {account.is_active && !editing && action === null && <div className="form-actions">
-      <button disabled={busy} onClick={() => setAction("add")}>Añadir dinero</button>
-      <button disabled={busy} onClick={() => setAction("withdraw")}>Retirar</button>
-      <button disabled={busy || !accounts.some((a) => a.is_active && a.id !== account.id)} onClick={() => setAction("move")}>Mover</button>
-    </div>}
-    {action && <QuickTransfer account={account} action={action} onClose={() => setAction(null)} onSaved={() => { setAction(null); onMessage("Transferencia guardada correctamente."); }} />}
-    {history && <History account={account} accounts={accounts} />}
+    <section className="savings-detail">
+      <h2>Información</h2>
+      <dl className="savings-facts">
+        <div><dt>Saldo actual</dt><dd>{formatMoney(account.current_balance, settings!.currency)}</dd></div>
+        <div><dt>Saldo inicial</dt><dd>{formatMoney(account.opening_balance, settings!.currency)}</dd></div>
+        <div><dt>Fecha de inicio</dt><dd>{new Intl.DateTimeFormat("es-ES", { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${account.start_date}T12:00:00Z`))}</dd></div>
+        <div><dt>Estado</dt><dd>{account.is_active ? "Activa" : "Inactiva"}</dd></div>
+      </dl>
+    </section>
+    <History account={account} accounts={accounts} />
+    <section className="savings-detail">
+      <h2>Gestionar cuenta</h2>
+      <ErrorMessage message={error} />
+      {editing ? <form onSubmit={(e) => { e.preventDefault(); mutate(true); }}><fieldset disabled={busy}>
+        <label>Nuevo nombre<input autoFocus required value={name} onChange={(e) => setName(e.target.value)} /></label>
+        <div className="form-actions"><button type="submit">{busy ? "Guardando…" : "Guardar nombre"}</button><button type="button" className="button-secondary" onClick={() => setEditing(false)}>Cancelar</button></div>
+      </fieldset></form> : <div className="form-actions">
+        <button className="button-secondary" disabled={busy || action !== null} onClick={() => setEditing(true)}>Renombrar</button>
+        <button className="button-secondary" disabled={busy || action !== null} onClick={() => mutate(false)}>{busy ? "Guardando…" : account.is_active ? "Desactivar cuenta" : "Restaurar cuenta"}</button>
+      </div>}
+    </section>
   </article>;
 }
 
+function AccountList({ accounts, currency }: { accounts: SavingsAccount[]; currency: Parameters<typeof formatMoney>[1] }) {
+  return <ul className="savings-list">{accounts.map((account) => <li key={account.id}>
+    <Link className={`savings-account-link${account.is_active ? "" : " is-inactive"}`} to={`?cuenta=${encodeURIComponent(account.id)}`}>
+      <span className="savings-account-name">{account.name}</span>
+      <small>{account.is_active ? "Activa" : "Inactiva"}</small>
+      <strong>{formatMoney(account.current_balance, currency)}</strong>
+      <span className="savings-chevron" aria-hidden="true">›</span>
+    </Link>
+  </li>)}</ul>;
+}
+
 export function SavingsPage() {
+  const { settings } = useSetup();
   const { data, loading, error, reload } = useRemote(readSavings);
+  const [params] = useSearchParams();
+  const selectedId = params.get("cuenta");
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState("");
-  return <>
-    <div className="page-heading"><div><p className="eyebrow">TUS CUENTAS</p><h1>Ahorro</h1><p>Todos tus ahorros, incluidas las cuentas inactivas.</p></div><button className="button-secondary" disabled={loading} onClick={reload}>Actualizar</button></div>
+  const page = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    page.current?.focus({ preventScroll: true });
+  }, [selectedId]);
+  const selected = data?.find((account) => account.id === selectedId);
+  const active = data?.filter((account) => account.is_active) ?? [];
+  const inactive = data?.filter((account) => !account.is_active) ?? [];
+  return <div className="savings-page" ref={page} tabIndex={-1}>
+    {selectedId ? <Link className="text-link savings-back" to="/ahorro">← Ahorro</Link> : <h1>Ahorro</h1>}
     {message && <p className="notice" role="status">{message}</p>}
-    {!creating && <button className="savings-create-button" onClick={() => setCreating(true)}>Crear cuenta de ahorro</button>}
-    {creating && <CreateAccount onCancel={() => setCreating(false)} onDone={() => { setCreating(false); setMessage("Cuenta de ahorro creada correctamente."); }} />}
     <ErrorMessage message={error} />
     {error && <button onClick={reload}>Reintentar carga</button>}
-    {loading ? <Loading text="Cargando cuentas de ahorro…" /> : !error && data && (data.length ?
-      <div className="savings-grid">{data.map((account) => <AccountCard key={`${account.id}:${account.version}`} account={account} accounts={data} onMessage={setMessage} />)}</div>
-      : <section className="card empty"><h2>Empieza a organizar tus ahorros</h2><p>Crea tu primera cuenta con el dinero que ya tienes ahorrado. Después podrás añadir, retirar o mover dinero.</p>{!creating && <button onClick={() => setCreating(true)}>Crear cuenta de ahorro</button>}</section>)}
-  </>;
+    {loading ? <Loading text="Cargando cuentas de ahorro…" /> : !error && data && (selectedId ? (
+      selected ? <AccountDetail key={`${selected.id}:${selected.version}`} account={selected} accounts={data} onMessage={setMessage} />
+        : <p className="empty">Esta cuenta no está disponible.</p>
+    ) : <>
+      <dl className="savings-total"><div><dt>Total ahorrado</dt><dd>{formatMoney(sumAmounts(data.map((account) => account.current_balance)), settings!.currency)}</dd></div></dl>
+      {!data.length && !creating && <p>Aún no tienes cuentas de ahorro.</p>}
+      {!creating && <button className="savings-create-button" onClick={() => setCreating(true)}>+ Crear cuenta</button>}
+      {creating && <CreateAccount onCancel={() => setCreating(false)} onDone={() => { setCreating(false); setMessage("Cuenta de ahorro creada correctamente."); }} />}
+      {active.length > 0 && <AccountList accounts={active} currency={settings!.currency} />}
+      {inactive.length > 0 && <details className="savings-inactive">
+        <summary>Cuentas inactivas · {inactive.length}<span aria-hidden="true">⌄</span></summary>
+        <AccountList accounts={inactive} currency={settings!.currency} />
+      </details>}
+    </>)}
+  </div>;
 }

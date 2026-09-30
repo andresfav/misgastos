@@ -7,6 +7,7 @@ import { ErrorMessage, Loading } from "../components/Feedback";
 import { AccountSettings } from "../components/AccountSettings";
 import { PreferencesSettings } from "../components/PreferencesSettings";
 import { ResetFinancialData } from "../components/ResetFinancialData";
+import { AppSignature } from "../components/AppSignature";
 
 export function SettingsPage() {
   const { data, error, loading, reload } = useRemote(readReferences);
@@ -62,6 +63,7 @@ export function SettingsPage() {
         </section>
         <ResetFinancialData />
       </div>
+      <AppSignature showAppInfo />
     </>
   );
 }

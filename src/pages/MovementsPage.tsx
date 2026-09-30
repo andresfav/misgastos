@@ -1,288 +1,89 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useRemote } from "../hooks/useRemote";
 import { useSetup } from "../hooks/useSetup";
-import { useSubmit } from "../hooks/useSubmit";
-import { useRequestAttempt } from "../hooks/useRequestAttempt";
-import { readMovementScreen, mutateMovement } from "../lib/movements";
+import { readMovementScreen } from "../lib/movements";
 import { formatMoney } from "../lib/money";
 import { formatDate } from "../lib/dates";
-import { movementError, isStaleData } from "../lib/errors";
-import { refreshFinancialData } from "../lib/refresh";
-import {
-  movementLabels,
-  type Movement,
-  type MovementKind,
-  type References,
-} from "../types/movements";
+import { filterHistory, sortHistory, historyLabels, movementContext, movementDescription, type HistoryKind, type HistoryFilters as Filters, type HistorySort } from "../lib/movementHistory";
+import { movementLabels, type Movement } from "../types/movements";
 import { ErrorMessage, Loading } from "../components/Feedback";
-import { MovementForm } from "../components/MovementForm";
+import { HistoryFilters, filterKeys } from "../components/HistoryFilters";
+import { MovementDetail } from "../components/MovementDetail";
 
-function DeleteMovement({
-  row,
-  onDone,
-  onCancel,
-  onConflict,
-}: {
-  row: Movement;
-  onDone: () => void;
-  onCancel: () => void;
-  onConflict: () => void;
-}) {
-  const { busy, error, submit } = useSubmit(movementError);
-  const attempt = useRequestAttempt(`delete:${row.kind}:${row.id}`);
-  const remove = () =>
-    void submit(async () => {
-      const parameters = { p_id: row.id, p_expected_version: row.version };
-      try {
-        await mutateMovement(
-          "delete",
-          row.kind,
-          parameters,
-          attempt.requestId(parameters),
-        );
-      } catch (failure) {
-        if (isStaleData(failure)) {
-          attempt.clear();
-          onConflict();
-          refreshFinancialData();
-        }
-        throw failure;
-      }
-      attempt.clear();
-      onDone();
-      refreshFinancialData();
-    });
-  return (
-    <div className="delete-confirm">
-      <p>
-        ¿Borrar este movimiento? Se actualizarán los saldos afectados. Esta
-        acción no se puede deshacer.
-      </p>
-      <ErrorMessage message={error} />
-      <div className="form-actions">
-        <button className="button-danger" disabled={busy} onClick={remove}>
-          {busy ? "Borrando…" : "Confirmar borrado"}
-        </button>
-        <button className="button-secondary" disabled={busy} onClick={onCancel}>
-          Cancelar
-        </button>
-      </div>
-    </div>
-  );
-}
-function MovementDetails({ row, refs }: { row: Movement; refs: References }) {
-  const account = (id: string | null) =>
-    id
-      ? refs.accounts.find((a) => a.id === id)?.name || "Cuenta no disponible"
-      : "Disponible";
-  return (
-    <div className="movement-details">
-      {row.kind === "expense" && (
-        <>
-          <span>
-            {refs.categories.find((c) => c.id === row.category_id)?.name ||
-              "Categoría no disponible"}
-          </span>
-          {row.payment_method_id && (
-            <span>
-              Método:{" "}
-              {refs.methods.find((m) => m.id === row.payment_method_id)?.name ||
-                "No disponible"}
-            </span>
-          )}
-          {row.merchant && <span>Comercio: {row.merchant}</span>}
-          {row.note && <span>Nota: {row.note}</span>}
-          {row.is_recurring && <span>Recurrente</span>}
-        </>
-      )}
-      {row.kind === "income" && (
-        <span>Destino: {account(row.savings_account_id)}</span>
-      )}
-      {row.kind === "transfer" && (
-        <span>
-          {account(row.from_savings_account_id)} →{" "}
-          {account(row.to_savings_account_id)}
-        </span>
-      )}
-    </div>
-  );
-}
 export function MovementsPage() {
   const { data, loading, error, reload } = useRemote(readMovementScreen);
   const { settings } = useSetup();
-  const [filter, setFilter] = useState<MovementKind | "all">("all");
-  const [selected, setSelected] = useState<{
-    row: Movement;
-    action: "edit" | "delete";
-  } | null>(null);
-  const [message, setMessage] = useState("");
-  const conflict = () => {
-    setSelected(null);
-    setMessage(
-      "Los datos han cambiado o ya no existen. Se ha actualizado la lista; revisa el movimiento antes de volver a intentarlo.",
-    );
-  };
-  const rows =
-    data?.rows.filter((row) => filter === "all" || row.kind === filter) || [];
-  return (
-    <>
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">TU ACTIVIDAD</p>
-          <h1>Movimientos</h1>
-        </div>
-        <button
-          className="button-secondary"
-          disabled={loading || !!selected}
-          onClick={reload}
-        >
-          Actualizar
-        </button>
-      </div>
-      {message && (
-        <p className="notice" role="status">
-          {message}
-        </p>
-      )}
-      {selected && data ? (
-        <section className="card form-card">
-          <h2>
-            {selected.action === "edit" ? "Editar" : "Borrar"}{" "}
-            {movementLabels[selected.row.kind].toLowerCase()}
-          </h2>
-          <p>
-            {formatDate(selected.row.date)} ·{" "}
-            {formatMoney(selected.row.amount, settings!.currency)}
-          </p>
-          {selected.action === "edit" ? (
-            <MovementForm
-              key={`${selected.row.id}:${selected.row.version}`}
-              kind={selected.row.kind}
-              row={selected.row}
-              refs={data.refs}
-              onCancel={() => setSelected(null)}
-              onConflict={conflict}
-              onSaved={() => {
-                setSelected(null);
-                setMessage("Movimiento actualizado.");
-              }}
-            />
-          ) : (
-            <DeleteMovement
-              key={selected.row.id}
-              row={selected.row}
-              onCancel={() => setSelected(null)}
-              onConflict={conflict}
-              onDone={() => {
-                setSelected(null);
-                setMessage("Movimiento borrado.");
-              }}
-            />
-          )}
-        </section>
-      ) : (
-        <>
-          <div
-            className="segmented"
-            role="group"
-            aria-label="Filtrar movimientos"
-          >
-            {(["all", "expense", "income", "transfer"] as const).map(
-              (value) => (
-                <button
-                  key={value}
-                  aria-pressed={filter === value}
-                  onClick={() => setFilter(value)}
-                >
-                  {value === "all" ? "Todos" : movementLabels[value]}
-                </button>
-              ),
-            )}
-          </div>
-          <p className="muted">
-            Hasta 100 movimientos recientes por tipo. Ordenados por fecha y
-            momento de creación, del más reciente al más antiguo.
-          </p>
-          <ErrorMessage message={error} />
-          {error && <button onClick={reload}>Reintentar</button>}
-          {loading ? (
-            <Loading />
-          ) : (
-            !error &&
-            data &&
-            (rows.length ? (
-              <ul className="movement-list">
-                {rows.map((row) => {
-                  const open = data.refs.periods.some(
-                    (p) => p.id === row.period_id && p.status === "open",
-                  );
-                  return (
-                    <li key={`${row.kind}:${row.id}`} className="card">
-                      <div className="movement-heading">
-                        <div>
-                          <span className={`movement-type ${row.kind}`}>
-                            {movementLabels[row.kind]}
-                          </span>
-                          <time dateTime={row.date}>
-                            {formatDate(row.date)}
-                          </time>
-                        </div>
-                        <strong>
-                          {formatMoney(row.amount, settings!.currency)}
-                        </strong>
-                      </div>
-                      <h2>
-                        {row.description ||
-                          (row.kind === "expense"
-                            ? row.merchant || "Gasto sin descripción"
-                            : `${movementLabels[row.kind]} sin descripción`)}
-                      </h2>
-                      <MovementDetails row={row} refs={data.refs} />
-                      {open ? (
-                        <div className="form-actions">
-                          <button
-                            className="button-secondary"
-                            onClick={() => {
-                              setSelected({ row, action: "edit" });
-                              setMessage("");
-                            }}
-                          >
-                            Editar
-                          </button>
-                          <button
-                            className="button-quiet danger-text"
-                            onClick={() => {
-                              setSelected({ row, action: "delete" });
-                              setMessage("");
-                            }}
-                          >
-                            Borrar
-                          </button>
-                        </div>
-                      ) : (
-                        <p className="muted">Período cerrado · Solo lectura</p>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <section className="card empty">
-                <h2>
-                  No hay movimientos{filter === "all" ? "" : " de este tipo"}
-                </h2>
-                <p>
-                  Tu actividad aparecerá aquí cuando registres un movimiento.
-                </p>
-                <Link className="button" to="/anadir">
-                  Añadir movimiento
-                </Link>
-              </section>
-            ))
-          )}
-        </>
-      )}
-    </>
-  );
+  const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  const requestedKind = params.get("tipo");
+  const kind: HistoryKind = requestedKind === "income" || requestedKind === "transfer" || requestedKind === "all" ? requestedKind : "expense";
+  const filters = Object.fromEntries(filterKeys.map((key) => [key, params.get(key) || ""])) as unknown as Filters;
+  const sort: HistorySort = params.get("orden") === "amount" ? "amount" : params.get("orden") === "context" ? "context" : "date";
+  const direction = params.get("direccion") === "asc" ? "asc" : "desc";
+  const [selected, setSelected] = useState<Movement | null>(null);
+  const [message, setMessage] = useState(location.state?.message || "");
+  function changeFilter(field: keyof Filters, value: string) {
+    setParams((previous) => { const next = new URLSearchParams(previous); if (value) next.set(field, value); else next.delete(field); return next; }, { replace: true });
+  }
+  function clearFilters() {
+    setParams((previous) => { const next = new URLSearchParams(previous); filterKeys.forEach((key) => next.delete(key)); return next; }, { replace: true });
+  }
+  function changeSort(value: HistorySort) {
+    setParams((previous) => { const next = new URLSearchParams(previous); next.set("orden", value); next.set("direccion", sort === value && direction === "desc" ? "asc" : "desc"); return next; }, { replace: true });
+  }
+  const filtered = data ? filterHistory(data.rows, kind, filters, data.refs) : [];
+  const rows = data ? sortHistory(filtered, sort, direction, kind, data.refs) : [];
+  // En móvil se mantiene el orden cronológico sin añadir controles de ordenación.
+  const mobileRows = data ? sortHistory(filtered, "date", "desc", kind, data.refs) : [];
+  const contextLabel = { expense: "Categoría", income: "Destino", transfer: "Movimiento", all: "Tipo" }[kind];
+  const context = (row: Movement) => kind === "all" ? movementLabels[row.kind] : movementContext(row, data!.refs);
+  const amount = (row: Movement) => `${row.kind === "expense" ? "−" : row.kind === "income" ? "+" : ""}${formatMoney(row.amount, settings!.currency)}`;
+  const hasMovements = data?.rows.some((row) => kind === "all" || row.kind === kind);
+  const conflict = () => { setSelected(null); setMessage("Los datos han cambiado o el movimiento ya no está disponible. Revisa la lista actualizada."); reload(); };
+  const header = (label: string, field: HistorySort) => <th scope="col" aria-sort={sort === field ? direction === "asc" ? "ascending" : "descending" : "none"}>
+    <button className="history-sort" onClick={() => changeSort(field)}>{label} <span aria-hidden="true">{sort === field ? direction === "asc" ? "↑" : "↓" : "↕"}</span></button></th>;
+  return <div className="history-page">
+    <div className="page-heading"><h1>Movimientos</h1><button className="button-quiet" disabled={loading || !!selected} onClick={reload}>Actualizar</button></div>
+    <div className="history-tabs" role="group" aria-label="Tipo de movimiento">
+      {(["expense", "income", "transfer", "all"] as const).map((value) => <button key={value} aria-pressed={kind === value} onClick={() => { setParams({ tipo: value }); setMessage(""); }}>{historyLabels[value]}</button>)}
+    </div>
+    {message && <p className="notice" role="status">{message}</p>}
+    <ErrorMessage message={error} />
+    {error && <button onClick={reload}>Reintentar</button>}
+    {loading ? <Loading text="Cargando movimientos…" /> : !error && data && <>
+      <HistoryFilters kind={kind} filters={filters} refs={data.refs} onChange={changeFilter} onClear={clearFilters} />
+      <p className="history-scope">Filtros sobre los últimos 100 movimientos de cada tipo.</p>
+      <p className="history-result-count" role="status">{rows.length} {rows.length === 1 ? "resultado" : "resultados"}</p>
+      {rows.length ? <>
+        <table className="history-table">
+          <caption className="sr-only">{historyLabels[kind]}. Abre un movimiento para ver sus detalles. El importe se ordena por su valor, sin el signo visual.</caption>
+          <colgroup><col className="history-date-col" /><col className="history-amount-col" /><col className="history-context-col" /><col /></colgroup>
+          <thead><tr>{header("Fecha", "date")}{header("Importe", "amount")}{header(contextLabel, "context")}<th scope="col">Descripción</th></tr></thead>
+          <tbody>{rows.map((row) => <tr key={`${row.kind}:${row.id}`} onClick={() => setSelected(row)}>
+            <td><time dateTime={row.date}>{formatDate(row.date)}</time></td>
+            <td className={`history-amount ${row.kind}`}>{amount(row)}</td>
+            <td><span className="history-truncate" title={context(row)}>{context(row)}</span></td>
+            <td><button className="history-open" onClick={() => setSelected(row)} aria-label={`Ver ${movementLabels[row.kind].toLowerCase()} del ${formatDate(row.date)}, ${amount(row)}: ${movementDescription(row)}`}>
+              <span className="history-truncate">{movementDescription(row)}</span><span aria-hidden="true">›</span>
+            </button></td>
+          </tr>)}</tbody>
+        </table>
+        <ul className="history-mobile">{mobileRows.map((row) => <li key={`${row.kind}:${row.id}`}>
+          <button className="history-mobile-row" onClick={() => setSelected(row)}>
+            <time dateTime={row.date}>{formatDate(row.date)}</time><strong className={`history-amount ${row.kind}`}>{amount(row)}</strong>
+            <span className="history-mobile-context">{row.kind === "transfer" && kind !== "all" && <span className="history-type-label">Transferencia · </span>}{context(row)}</span>
+            <span className="history-truncate">{movementDescription(row)}</span><span className="history-chevron" aria-hidden="true">›</span>
+          </button>
+        </li>)}</ul>
+      </> : <section className="history-empty">
+        <h2>{hasMovements ? `No hay ${kind === "all" ? "movimientos" : historyLabels[kind].toLowerCase()} que coincidan con estos filtros.` : `No hay ${kind === "all" ? "movimientos" : historyLabels[kind].toLowerCase()} todavía.`}</h2>
+        {hasMovements ? <button className="button-secondary" onClick={clearFilters}>Limpiar filtros</button>
+          : <Link className="button" to={`/anadir?tipo=${kind === "all" ? "expense" : kind}`}>Registrar {kind === "all" ? "movimiento" : movementLabels[kind].toLowerCase()}</Link>}
+      </section>}
+    </>}
+    {selected && data && <MovementDetail key={`${selected.kind}:${selected.id}`} row={selected} refs={data.refs} currency={settings!.currency}
+      returnTo={`${location.pathname}${location.search}`} onClose={() => setSelected(null)} onConflict={conflict}
+      onDeleted={() => { setSelected(null); setMessage("Movimiento eliminado."); }} />}
+  </div>;
 }

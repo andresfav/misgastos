@@ -19,6 +19,7 @@ import {
   type References,
 } from "../types/movements";
 import { ErrorMessage } from "./Feedback";
+import { AutoGrowingNote } from "./AutoGrowingNote";
 
 export function MovementForm({
   kind,
@@ -259,8 +260,7 @@ export function MovementForm({
             </label>
             <label>
               Nota <span className="optional">Opcional</span>
-              <textarea
-                rows={3}
+              <AutoGrowingNote
                 value={draft.note}
                 onChange={(e) => set("note", e.target.value)}
               />

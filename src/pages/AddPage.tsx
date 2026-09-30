@@ -1,12 +1,17 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useRemote } from "../hooks/useRemote";
 import { readReferences } from "../lib/movements";
 import { movementLabels, type MovementKind } from "../types/movements";
 import { ErrorMessage, Loading } from "../components/Feedback";
+import { EditMovementPage } from "./EditMovementPage";
 import { MovementForm } from "../components/MovementForm";
-export function AddPage() {
+function CreateMovementPage() {
   const { data, error, loading, reload } = useRemote(readReferences);
-  const [kind, setKind] = useState<MovementKind>("expense");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedKind = searchParams.get("tipo");
+  const kind: MovementKind = requestedKind === "income" || requestedKind === "transfer"
+    ? requestedKind : "expense";
   const [message, setMessage] = useState("");
   return (
     <>
@@ -22,7 +27,7 @@ export function AddPage() {
             key={value}
             aria-pressed={kind === value}
             onClick={() => {
-              setKind(value);
+              setSearchParams({ tipo: value }, { replace: true });
               setMessage("");
             }}
           >
@@ -58,4 +63,13 @@ export function AddPage() {
       )}
     </>
   );
+}
+
+export function AddPage() {
+  const [params] = useSearchParams();
+  const id = params.get("editar");
+  const kind = params.get("tipo");
+  if (id && (kind === "expense" || kind === "income" || kind === "transfer"))
+    return <EditMovementPage key={`${kind}:${id}`} id={id} kind={kind} />;
+  return <CreateMovementPage />;
 }

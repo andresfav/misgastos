@@ -4,6 +4,7 @@ import { useSetup } from "../hooks/useSetup";
 import { useAuth } from "../hooks/useAuth";
 import { useSubmit } from "../hooks/useSubmit";
 import { configureSettings, createFirstPeriod } from "../lib/finance";
+import { createInitialCategories } from "../lib/onboardingCategories";
 import { todayIn, periodDates, formatDate } from "../lib/dates";
 import { validateMoney } from "../lib/money";
 import type { Currency, FirstPeriodInput, PeriodMode } from "../types/finance";
@@ -88,6 +89,7 @@ export function OnboardingPage() {
       } catch {
         /* se mantiene en memoria */
       }
+      await createInitialCategories();
       await createFirstPeriod(input, attempt.current.id);
       try {
         sessionStorage.removeItem(storageKey);
