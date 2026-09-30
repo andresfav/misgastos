@@ -739,3 +739,41 @@ textarea:focus-visible {
     flex-grow: 0;
   }
 }
+
+/* Ahorro */
+.savings-grid {
+  display: grid;
+  gap: 20px;
+}
+.savings-create,
+.savings-create-button {
+  margin-bottom: 24px;
+}
+.savings-account {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.savings-facts {
+  display: grid;
+  gap: 14px;
+  margin: 0 0 20px;
+}
+.savings-balance {
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+.savings-detail {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.savings-history-row {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+@media (min-width: 600px) {
+  .savings-facts {
+    grid-template-columns: 2fr 1fr 1fr;
+    align-items: center;
+  }
+}

@@ -7,7 +7,9 @@ import { ErrorMessage, Loading } from "./components/Feedback";
 import { LogoutButton, Shell } from "./components/Shell";
 import { AuthPage } from "./pages/AuthPage";
 import { HomePage } from "./pages/HomePage";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
+const SavingsPage = lazy(() =>
+  import("./pages/SavingsPage").then((module) => ({ default: module.SavingsPage })),
+);
 
 const AddPage = lazy(() =>
   import("./pages/AddPage").then((module) => ({ default: module.AddPage })),
@@ -90,7 +92,7 @@ function AppRoutes() {
           <Route index element={<HomePage />} />
           <Route path="/movimientos" element={<MovementsPage />} />
           <Route path="/anadir" element={<AddPage />} />
-          <Route path="/ahorro" element={<PlaceholderPage page="ahorro" />} />
+          <Route path="/ahorro" element={<SavingsPage />} />
           <Route path="/ajustes" element={<SettingsPage />} />
         </Route>
       </Route>

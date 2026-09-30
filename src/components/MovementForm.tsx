@@ -27,6 +27,7 @@ export function MovementForm({
   onSaved,
   onConflict,
   onCancel,
+  initialTransfer,
 }: {
   kind: MovementKind;
   refs: References;
@@ -34,10 +35,14 @@ export function MovementForm({
   onSaved: () => void;
   onConflict: () => void;
   onCancel?: () => void;
+  initialTransfer?: { from: string; to: string };
 }) {
   const { settings } = useSetup();
   const today = todayIn(settings!.timezone);
-  const [draft, setDraft] = useState(() => movementDraft(today, row));
+  const [draft, setDraft] = useState(() => ({
+    ...movementDraft(today, row),
+    ...(!row && kind === "transfer" ? initialTransfer : {}),
+  }));
   const { busy, error, setError, submit } = useSubmit(movementError);
   const attempt = useRequestAttempt(
     `${row ? `update:${row.id}` : "create"}:${kind}`,
@@ -128,8 +133,7 @@ export function MovementForm({
         <p className="notice">
           No tienes cuentas de ahorro activas.{" "}
           {kind === "income" ? "Puedes ingresar dinero en Disponible. " : ""}La
-          creación de cuentas desde <Link to="/ahorro">Ahorro</Link> estará
-          disponible en el siguiente bloque.
+          creación de cuentas está disponible en <Link to="/ahorro">Ahorro</Link>.
         </p>
       )}
       <fieldset disabled={busy || !periodOpen}>
