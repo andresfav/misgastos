@@ -127,7 +127,7 @@ export function CategoryBudgets({ period, rows, categories, onMessage }: { perio
     {all.length ? <form onSubmit={save}><fieldset disabled={busy || period.status === "closed"}>
       <div className="category-budget-editor">{all.map((row) => <label className="category-budget-input" key={row.category_id}>
         <span>{row.category_name}{!row.category_is_active && <small className="muted">Categoría inactiva</small>}</span>
-        <input inputMode="decimal" aria-label={`Presupuesto de ${row.category_name} (${settings!.currency})`} placeholder="Sin límite" disabled={!editable(row)} value={draft[row.category_id] ?? ""} onChange={(e) => { setDraft({ ...draft, [row.category_id]: e.target.value }); setSaved(""); }} />
+        <input inputMode="decimal" aria-label={`Presupuesto de ${row.category_name} (${settings!.currency})`} placeholder="Sin presupuesto" disabled={!editable(row)} value={draft[row.category_id] ?? ""} onChange={(e) => { setDraft({ ...draft, [row.category_id]: e.target.value }); setSaved(""); }} />
       </label>)}</div>
       {period.status === "open" && <button type="submit">{busy ? "Guardando…" : "Guardar presupuestos"}</button>}
     </fieldset></form> : <p className="empty">No hay categorías activas. Puedes crearlas en Ajustes.</p>}

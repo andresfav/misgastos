@@ -40,7 +40,10 @@ function CatalogSettings({ kind }: { kind: CatalogKind }) {
     <ErrorMessage message={error} />
     {error && <button onClick={reload} disabled={loading}>Reintentar</button>}
     {loading && !data && <Loading />}
-    {data && <CatalogManager kind={kind} items={kind === "category" ? data.categories : data.methods} onMessage={setMessage} />}
+    {data && <fieldset className="catalog-loading" disabled={loading || !!error} aria-busy={loading}>
+      {loading && <Loading text="Actualizando…" />}
+      <CatalogManager kind={kind} items={kind === "category" ? data.categories : data.methods} onMessage={setMessage} />
+    </fieldset>}
   </>;
 }
 

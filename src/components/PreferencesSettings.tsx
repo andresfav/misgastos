@@ -36,7 +36,7 @@ export function PreferencesSettings() {
         ? "La moneda queda fijada mientras exista historial financiero."
         : "La moneda se muestra en modo de solo lectura. Podrás elegirla de nuevo después de Empezar de cero."}</p>
       <details className="settings-disclosure">
-        <summary className="settings-row"><span><strong>Zona horaria</strong><small>{settings!.timezone}</small></span><span className="settings-chevron" aria-hidden="true">›</span></summary>
+        <summary className="settings-row"><span><strong>Zona horaria</strong><small>{settings!.timezone}</small></span><span className="settings-chevron" aria-hidden="true">⌄</span></summary>
       <form onSubmit={save}>
         <fieldset disabled={busy}>
           <label>Zona horaria

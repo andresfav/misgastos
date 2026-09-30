@@ -197,7 +197,7 @@ export function OnboardingPage() {
                     <option value="monthly">Mensual</option>
                     <option value="annual">Anual</option>
                     <option value="custom">Personalizado</option>
-                    <option value="between_paydays">Entre nóminas</option>
+                    <option value="between_paydays">Entre cobros</option>
                   </select>
                 </label>
                 {["monthly", "annual"].includes(mode) ? (

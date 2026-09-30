@@ -43,7 +43,7 @@ function Summary({ summary }: { summary: PeriodSummary }) {
     ["Transferencias de disponible a ahorro", summary.transfer_to_savings_total], ["Transferencias de ahorro a disponible", summary.transfer_from_savings_total],
   ];
   return <>
-    <p className="muted">A {formatDate(summary.as_of_date)}. Totales calculados por el backend.</p>
+    <p className="muted">A {formatDate(summary.as_of_date)}.</p>
     <dl className="budget-facts">{amounts.map(([label, amount]) => <div key={label}><dt>{label}</dt><dd>{amount === null ? "Sin presupuesto" : formatMoney(amount, settings!.currency)}</dd></div>)}</dl>
   </>;
 }
@@ -78,7 +78,7 @@ function CurrentPeriods() {
   const editable = current?.status === "open" && data?.detail?.summary.period.status === "open";
   return <div className="periods-page">
     <Link className="settings-back" to="/ajustes">← Ajustes</Link>
-    <div className="page-heading"><div><p className="eyebrow">PLANIFICACIÓN</p><h1 ref={heading} tabIndex={-1}>Períodos y presupuestos</h1></div><button className="button-secondary" disabled={loading} onClick={refreshFinancialData}>Actualizar</button></div>
+    <div className="page-heading"><div><p className="eyebrow">PLANIFICACIÓN</p><h1 ref={heading} tabIndex={-1}>Períodos y presupuestos</h1></div><button className="button-quiet" disabled={loading} onClick={refreshFinancialData}>Actualizar</button></div>
     {message && <p className="notice" role="status">{message}</p>}
     <ErrorMessage message={error} />
     {error && <button onClick={refreshFinancialData}>Reintentar carga</button>}
@@ -117,13 +117,13 @@ function HistoricalPeriod({ id }: { id: string }) {
     <ErrorMessage message={error} />
     {error && <button onClick={reload}>Reintentar carga</button>}
     {loading && <Loading />}
-    {data && period && !error && period.status === "closed" && <>
+    {!loading && data && period && !error && period.status === "closed" && <>
       <h1 ref={heading} tabIndex={-1}>{periodRange(period)}</h1>
       <section className="card"><PeriodFacts period={period} /><h2>Resumen</h2><Summary summary={data.summary} /></section>
       <section className="card"><HistoricalCategoryBudgets rows={data.usage} /></section>
       <p className="muted">Este período está cerrado y no puede modificarse.</p>
     </>}
-    {period && period.status !== "closed" && <p>Este período no pertenece al historial de períodos cerrados.</p>}
+    {!loading && !error && period && period.status !== "closed" && <p>Este período no pertenece al historial de períodos cerrados.</p>}
   </div>;
 }
 export function PeriodsPage() {

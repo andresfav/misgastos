@@ -14,8 +14,8 @@ export function EditMovementPage({ id, kind }: { id: string; kind: MovementKind 
   const returnTo = typeof location.state?.returnTo === "string" && /^\/movimientos(?:\?|$)/.test(location.state.returnTo) ? location.state.returnTo : `/movimientos?tipo=${kind}`;
   const editable = data?.row && data.refs.periods.some((period) => period.id === data.row!.period_id && period.status === "open");
   return <>
+    <Link className="back-link" to={returnTo}>← Movimientos</Link>
     <div className="page-heading"><h1>Editar {movementLabels[kind].toLowerCase()}</h1></div>
-    <Link className="text-link" to={returnTo}>← Volver a Movimientos</Link>
     {message && <p className="notice" role="status">{message}</p>}
     <ErrorMessage message={error} />
     {error && <button onClick={reload}>Reintentar</button>}

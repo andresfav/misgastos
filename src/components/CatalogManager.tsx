@@ -53,7 +53,7 @@ function CatalogRow({
   return (
     <li>
       <details ref={detail} className="settings-disclosure">
-        <summary ref={summary} className="settings-row"><span>{item.name}</span><span className="settings-chevron" aria-hidden="true">›</span></summary>
+        <summary ref={summary} className="settings-row"><span>{item.name}</span><span className="settings-chevron" aria-hidden="true">⌄</span></summary>
         <div className="settings-row-detail">
       <ErrorMessage message={error} />
       {editing ? (
@@ -177,10 +177,10 @@ export function CatalogManager({
       </details>
       <h2 ref={listHeading} tabIndex={-1} className="settings-catalog-heading">{kind === "category" ? "Activas" : "Activos"}</h2>
       {active.length ? rows(active) : <p className="muted">{kind === "category" ? "No hay categorías activas." : "No hay métodos activos."}</p>}
-      <details className="settings-disclosure settings-inactive">
-        <summary className="settings-row"><span>{kind === "category" ? "Categorías inactivas" : "Métodos inactivos"} · {inactive.length}</span><span className="settings-chevron" aria-hidden="true">›</span></summary>
-        {inactive.length ? rows(inactive) : <p className="muted">{kind === "category" ? "No hay categorías inactivas." : "No hay métodos inactivos."}</p>}
-      </details>
+      {inactive.length > 0 && <details className="settings-disclosure settings-inactive">
+        <summary className="settings-row"><span>{kind === "category" ? "Categorías inactivas" : "Métodos inactivos"} · {inactive.length}</span><span className="settings-chevron" aria-hidden="true">⌄</span></summary>
+        {rows(inactive)}
+      </details>}
       <p className="muted settings-catalog-help">Desactivar conserva el historial. Puedes restaurar cualquier elemento más adelante.</p>
     </section>
   );

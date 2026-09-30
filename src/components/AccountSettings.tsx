@@ -30,14 +30,14 @@ export function AccountSettings() {
     <section className="settings-content" aria-label="Datos de cuenta">
       <dl className="settings-list"><div><dt>Email</dt><dd>{session?.user.email}</dd></div></dl>
       <details className="settings-disclosure">
-        <summary className="settings-row"><span>Cambiar contraseña</span><span className="settings-chevron" aria-hidden="true">›</span></summary>
+        <summary className="settings-row"><span>Cambiar contraseña</span><span className="settings-chevron" aria-hidden="true">⌄</span></summary>
         <form onSubmit={save}>
           <fieldset disabled={busy}>
             <label>Nueva contraseña
               <input type="password" required minLength={8} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
               <small>Al menos 8 caracteres. Combina letras, números y símbolos.</small>
             </label>
-            <label>Repetir contraseña
+            <label>Repite la contraseña
               <input type="password" required minLength={8} autoComplete="new-password" value={confirmation} onChange={(e) => setConfirmation(e.target.value)} />
             </label>
             <button type="submit">{busy ? "Guardando…" : "Guardar contraseña"}</button>

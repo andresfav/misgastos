@@ -58,7 +58,7 @@ function CreateMovementPage() {
               initialDate={initialDate}
               refs={data}
               onSaved={() =>
-                setMessage(`${movementLabels[kind]} guardado correctamente.`)
+                setMessage(kind === "transfer" ? "Transferencia guardada." : `${movementLabels[kind]} guardado.`)
               }
               onConflict={reload}
             />

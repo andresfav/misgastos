@@ -20,6 +20,9 @@
 * {
   box-sizing: border-box;
 }
+html {
+  scroll-padding-bottom: calc(120px + env(safe-area-inset-bottom));
+}
 body {
   margin: 0;
   min-width: 320px;
@@ -54,7 +57,7 @@ button:hover,
 }
 button:disabled {
   opacity: 0.6;
-  cursor: wait;
+  cursor: not-allowed;
 }
 a:focus-visible,
 button:focus-visible,
@@ -96,6 +99,7 @@ fieldset {
   gap: 20px;
 }
 label {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -112,6 +116,8 @@ select {
   background: #fff;
   color: #233b32;
   padding: 11px 12px;
+  font-size: 1rem;
+  max-width: 100%;
 }
 form {
   margin-top: 26px;
@@ -247,7 +253,7 @@ strong {
 }
 .auth-links a {
   display: inline-block;
-  min-height: 32px;
+  min-height: 44px;
 }
 .auth-links p {
   margin-bottom: 0;
@@ -267,6 +273,7 @@ strong {
   padding: 18px 20px 120px;
 }
 .page-heading {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -504,7 +511,7 @@ dd {
     grid-column: 1/-1;
   }
   .form-row {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .onboarding {
     margin: 30px auto;
@@ -596,7 +603,7 @@ dd {
   background: #e8eee8;
 }
 .segmented button {
-  flex: 1;
+  flex: 1 1 auto;
   padding: 10px 8px;
   background: transparent;
   color: var(--green);
@@ -627,6 +634,7 @@ textarea {
   background: white;
   color: #233b32;
   font: inherit;
+  font-size: 1rem;
   padding: 12px;
   resize: vertical;
 }
@@ -1085,7 +1093,7 @@ textarea:focus-visible {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 16px;
   align-items: center;
   gap: 10px;
-  min-height: 64px;
+  min-height: 56px;
   padding: 12px 4px;
   cursor: pointer;
   border-radius: 6px;
@@ -1122,7 +1130,7 @@ textarea:focus-visible {
 .pace-description { margin: 12px 0 0; font-size: 0.9rem; }
 .home-page > .recent-activity { margin-top: 24px; }
 @media (min-width: 600px) {
-  .home-accordion > summary { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 20px; min-height: 60px; padding: 12px; }
+  .home-accordion > summary { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 20px; min-height: 56px; padding: 12px; }
   .accordion-title { font-size: 0.95rem; }
   .accordion-summary { font-size: 0.85rem; }
   .accordion-content { padding: 4px 12px 24px; }
@@ -1288,7 +1296,7 @@ textarea:focus-visible {
 .settings-disclosure > summary::-webkit-details-marker { display: none; }
 .settings-disclosure > summary::marker { content: ""; }
 .settings-disclosure > summary:focus-visible { outline: 3px solid #b2782a; outline-offset: 3px; }
-.settings-disclosure[open] > summary .settings-chevron { transform: rotate(90deg); }
+.settings-disclosure[open] > summary .settings-chevron { transform: rotate(180deg); }
 .settings-content .settings-list { margin: 0 0 16px; }
 .settings-content .settings-list dd { overflow-wrap: anywhere; }
 .settings-content > .settings-disclosure:not(.settings-create) { border-block: 1px solid var(--border); }
@@ -1325,3 +1333,45 @@ textarea:focus-visible {
 .period-history-balance { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
 .period-usage-row { display: grid; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 .period-success .button { display: inline-flex; justify-content: center; max-width: 100%; }
+
+/* Pulido compartido: respetar la jerarquía y contener contenido largo. */
+.main-content h1 { font-size: 1.65rem; }
+.main-content .home-heading h1 { font-size: 1.55rem; }
+.page-heading > *, .form-row > *, .budget-facts > *, .detail-facts > * { min-width: 0; }
+h1, h2, h3, label, button, .button { overflow-wrap: anywhere; }
+button, .button { max-width: 100%; }
+.form-actions > * { min-width: 0; }
+.standalone { width: calc(100% - 32px); }
+.settings-back, .savings-back, .back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.settings-back:hover, .savings-back:hover, .back-link:hover { text-decoration: underline; }
+.history-filters > summary, .savings-inactive > summary, .settings-disclosure > .settings-row {
+  min-height: 56px;
+  padding-block: 12px;
+  font-size: 0.9rem;
+  border-radius: 6px;
+}
+.history-filters > summary:hover, .savings-inactive > summary:hover { background: #edf2ec; }
+.settings-disclosure .settings-chevron, .history-filters summary > span, .savings-inactive summary > span {
+  flex-shrink: 0;
+  color: var(--green);
+  font-size: 1rem;
+  font-weight: 700;
+}
+.catalog-loading { gap: 0; }
+.catalog-loading > .loading { padding: 20px 0; }
+.periods-page > .card + .card { margin-top: 24px; }
+.reset-dialog { overscroll-behavior: contain; }
+@media (max-width: 599px) {
+  .category-budget-input { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+@media (min-width: 900px) {
+  html { scroll-padding-bottom: 32px; }
+}
