@@ -48,9 +48,21 @@ Referencia del flujo de recovery: [Supabase Auth](https://supabase.com/docs/refe
 
 ## PWA y despliegue
 
-`vite-plugin-pwa` genera manifest y service worker en producción. Se precargan únicamente recursos estáticos; no hay caché de API, Auth ni datos financieros. La app necesita conexión para autenticación y consultas. Las rutas `/auth/` quedan fuera del fallback offline. Las actualizaciones se activan al cerrar las ventanas anteriores y volver a abrir la app, para no recargar un formulario en curso.
+`vite-plugin-pwa` conserva la estrategia `generateSW` y `prompt`. El único registro está en `src/lib/pwa.ts`, mediante el módulo virtual del plugin; está desactivado en desarrollo. No reutilizar el puerto de producción/preview para `vite dev`: si ya existe un worker en ese origen, retirarlo desde DevTools → Application → Service Workers.
 
-Se incluyen iconos **provisionales** propios (M geométrica) de 192 y 512 px; queda pendiente la identidad visual final y un icono maskable. HTTPS es necesario fuera de localhost. Los requisitos de instalación dependen del navegador. Base de configuración: [Vite PWA](https://vite-pwa-org.netlify.app/guide/service-worker-strategies-and-behaviors).
+El precache incluye exclusivamente los archivos estáticos de `dist/` (HTML, JS, CSS, imágenes y manifest), también los chunks de rutas diferidas. No hay reglas de caché de API, respuestas de Supabase, tokens, cola offline ni sincronización diferida. El fallback sirve el HTML estático para las rutas React, incluidas las de acceso; excluye rutas de API y archivos. Una visita online completa es necesaria antes de poder abrir la shell sin conexión. El aviso «Sin conexión» desaparece al reconectar; los datos y operaciones siguen dependiendo de Supabase y sus errores reales. Los datos ya visibles en memoria pueden permanecer en pantalla.
+
+Las revisiones y hashes del build actualizan el precache; al activar, Workbox elimina únicamente entradas antiguas de su propia caché, identificada por el scope del worker. Se desactiva `cleanupOutdatedCaches` porque su barrido de nombres podría alcanzar cachés de otras aplicaciones. No hay borrado global de Cache Storage.
+
+Una actualización queda esperando y muestra «Nueva versión disponible» con «Actualizar». Se comprueba al registrar, volver a la aplicación, recuperar conexión y cada hora mientras está visible. Solo la ventana que pulsa el botón puede recargarse automáticamente; otra ventana recibe el aviso. Terminar los formularios antes de actualizar y actualizar también las otras ventanas abiertas. La activación natural al cerrar todas las ventanas sigue disponible. Implementación basada en la [integración del plugin](https://vite-pwa-org.netlify.app/frameworks/react.html).
+
+Se conservan los iconos propios de 192/512 px y el SVG. `apple-touch-icon.png` (180 px) y `icon-maskable-512.png` (512 px, con margen seguro) son variantes técnicas del PNG existente. Se mantienen los colores actuales, español, `standalone` y orientación libre. El viewport admite safe areas; navegación inferior, contenido y diálogos tienen en cuenta los insets.
+
+Desplegar `dist/` mediante HTTPS. El hosting debe devolver el `index.html` de la base para las rutas React incluso en la primera visita, sin reescribir archivos inexistentes ni endpoints de API. Servir `sw.js`, `index.html` y `manifest.webmanifest` con revalidación (`Cache-Control: no-cache`); los assets con hash pueden usar caché inmutable. El worker debe servirse como JavaScript, nunca como HTML. Mantener temporalmente los assets del despliegue anterior ayuda a las ventanas que sigan abiertas. No hay configuración de hosting incluida en el repositorio.
+
+La base actual es `/`. Para una subruta usar una base absoluta de pathname con barra final, por ejemplo `npm run build -- --base=/misgastos/`. Manifest, iconos, registro y React Router siguen esa base; los enlaces de confirmación/recuperación conservan el mismo flujo de Auth y usan esa base. Añadir sus URL exactas a las permitidas en Supabase. No usar `base: "./"` con BrowserRouter.
+
+Validación física pendiente: instalación y arranque en Android/iOS/desktop, recarga de rutas, teclado, rotación, notch/home indicator y actualización con varias ventanas. Safari/iOS puede desalojar la caché; la disponibilidad offline no se garantiza indefinidamente.
 
 ## Movimientos, Añadir y catálogos
 

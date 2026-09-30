@@ -7,29 +7,47 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "prompt",
-      includeAssets: ["icon.svg", "icon-192.png", "icon-512.png"],
+      injectRegister: false,
+      devOptions: { enabled: false },
       manifest: {
         name: "MisGastos",
         short_name: "MisGastos",
         lang: "es",
         description: "Tus finanzas personales, con claridad.",
         display: "standalone",
-        start_url: "/",
-        scope: "/",
+        id: "./",
+        start_url: "./",
+        scope: "./",
         theme_color: "#17634e",
         background_color: "#f5f7f4",
-        icons: [192, 512].map((size) => ({
-          src: `/icon-${size}.png`,
-          sizes: `${size}x${size}`,
-          type: "image/png",
-          purpose: "any",
-        })),
+        icons: [
+          ...[192, 512].map((size) => ({
+            src: `icon-${size}.png`,
+            sizes: `${size}x${size}`,
+            type: "image/png",
+            purpose: "any",
+          })),
+          {
+            src: "icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
       },
       workbox: {
         // Solo recursos estáticos. Las respuestas de Auth y financieras no se cachean.
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
-        navigateFallbackDenylist: [/^\/auth\//],
-        cleanupOutdatedCaches: true,
+        navigateFallbackDenylist: [
+          /\/(?:api|rest|auth\/v1|storage|functions)\//,
+          /\/[^/?]+\.[^/?]+(?:\?|$)/,
+        ],
+        runtimeCaching: [],
+        skipWaiting: false,
+        clientsClaim: false,
+        // El precache elimina sus entradas obsoletas al activar. Evitamos la
+        // limpieza global de Workbox, que también podría afectar a otra PWA.
+        cleanupOutdatedCaches: false,
       },
     }),
   ],

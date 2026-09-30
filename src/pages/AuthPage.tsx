@@ -54,7 +54,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
         const { data, error } = await client().auth.signUp({
           email: email.trim(),
           password,
-          options: { emailRedirectTo: `${window.location.origin}/` },
+          options: { emailRedirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).href },
         });
         if (error) throw error;
         if (!data.session)
@@ -64,7 +64,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
       } else if (mode === "forgot") {
         const { error } = await client().auth.resetPasswordForEmail(
           email.trim(),
-          { redirectTo: `${window.location.origin}/auth/nueva-contrasena` },
+          { redirectTo: new URL(`${import.meta.env.BASE_URL}auth/nueva-contrasena`, window.location.origin).href },
         );
         if (error) throw error;
         setMessage(

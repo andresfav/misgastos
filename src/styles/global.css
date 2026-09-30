@@ -26,6 +26,9 @@ html {
 body {
   margin: 0;
   min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
 }
 a {
   color: var(--green);
@@ -297,7 +300,7 @@ strong {
   grid-template-columns: repeat(5, 1fr);
   background: #fff;
   border-top: 1px solid var(--border);
-  padding: 8px 5px calc(8px + env(safe-area-inset-bottom));
+  padding: 8px max(5px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(5px, env(safe-area-inset-left));
 }
 .navigation a {
   display: flex;
@@ -1374,4 +1377,25 @@ button, .button { max-width: 100%; }
 }
 @media (min-width: 900px) {
   html { scroll-padding-bottom: 32px; }
+}
+
+/* Avisos en el flujo: no tapan formularios ni la navegación inferior. */
+.pwa-status {
+  max-width: 1080px;
+  margin: 0 auto;
+  color: #233b32;
+  font-size: 0.9rem;
+}
+.pwa-status:has(p) {
+  padding: 12px 20px;
+  background: #e8f0e9;
+  border-bottom: 1px solid var(--border);
+}
+.pwa-status p { margin: 0; color: inherit; }
+.pwa-status button { margin-top: 8px; }
+.reset-dialog,
+.movement-dialog {
+  max-width: calc(100% - 32px - env(safe-area-inset-left) - env(safe-area-inset-right));
+  max-height: calc(100vh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
 }
