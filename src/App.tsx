@@ -24,6 +24,9 @@ const SettingsPage = lazy(() =>
     default: module.SettingsPage,
   })),
 );
+const PeriodsPage = lazy(() =>
+  import("./pages/PeriodsPage").then((module) => ({ default: module.PeriodsPage })),
+);
 
 const OnboardingPage = lazy(() =>
   import("./pages/OnboardingPage").then((module) => ({
@@ -94,6 +97,7 @@ function AppRoutes() {
           <Route path="/anadir" element={<AddPage />} />
           <Route path="/ahorro" element={<SavingsPage />} />
           <Route path="/ajustes" element={<SettingsPage />} />
+          <Route path="/ajustes/periodos" element={<PeriodsPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

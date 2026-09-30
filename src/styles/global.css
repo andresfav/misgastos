@@ -777,3 +777,31 @@ textarea:focus-visible {
     align-items: center;
   }
 }
+
+/* Períodos y presupuestos */
+.period-layout {
+  display: grid;
+  gap: 24px;
+}
+.period-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+.budget-facts {
+  display: grid;
+  gap: 16px;
+  margin: 20px 0;
+}
+.budget-facts dd {
+  font-variant-numeric: tabular-nums;
+}
+.period-settings-link {
+  margin-top: 24px;
+}
+@media (min-width: 600px) {
+  .budget-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

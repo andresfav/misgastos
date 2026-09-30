@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useSetup } from "../hooks/useSetup";
 import { useRemote } from "../hooks/useRemote";
@@ -41,6 +42,11 @@ export function SettingsPage() {
             <dd>{settings!.timezone}</dd>
           </div>
         </dl>
+      </section>
+      <section className="card period-settings-link">
+        <h2>Períodos y presupuestos</h2>
+        <p>Consulta tu período actual, abre el siguiente y planifica tus gastos.</p>
+        <Link className="button" to="/ajustes/periodos">Gestionar períodos y presupuestos</Link>
       </section>
       {message && (
         <p className="notice" role="status">
