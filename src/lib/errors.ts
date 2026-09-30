@@ -35,7 +35,7 @@ export function friendlyError(error: unknown): string {
     case "40001":
       return "Los datos han cambiado. Revisa la versión actual antes de volver a guardar.";
     case "23505":
-      return "Ya existe ese nombre. Comprueba también los elementos inactivos o elige otro.";
+      return "Ya existe un elemento activo con ese nombre. Elige otro.";
     case "P0002":
       return "No se ha encontrado la configuración necesaria. Recarga para continuar.";
     default:

@@ -42,9 +42,9 @@ Referencia del flujo de recovery: [Supabase Auth](https://supabase.com/docs/refe
 - Primer período: `create_first_period(p_mode, p_start_date, p_end_date, p_opening_balance, p_request_id, p_general_budget)`. Mes y año naturales se calculan sobre el día de la zona configurada; personalizado debe contener hoy y entre nóminas se envía con final `null`.
 - Los importes de formulario se validan y se envían como texto decimal, admitiendo coma o punto, dos decimales y 18 cifras enteras. El disponible inicial puede ser negativo; el presupuesto, no. No se envía `user_id` a las RPC.
 - Se genera un UUID por petición lógica del primer período. Se conserva en memoria y, si está disponible, en `sessionStorage`, asociado a los parámetros. Un reintento idéntico reutiliza el UUID; cambiar parámetros genera otro. Tras éxito se elimina. La existencia del historial siempre se consulta en Supabase. El botón de comprobación permite resolver una respuesta perdida consultando el servidor.
-- Inicio llama a `get_current_financial_state()` y presenta disponible, gastos, ingresos, presupuesto/restante y todas las cuentas de ahorro con sus saldos y estado. No suma movimientos ni reconstruye saldos.
+- Inicio llama a `get_current_financial_state()` y presenta disponible, gastos, ingresos, presupuesto/restante y la distribución del ahorro. Muestra cuentas activas y cuentas legacy inactivas con saldo; oculta las borradas a cero sin excluir dinero del total. No suma movimientos ni reconstruye saldos.
 
-`src/types/finance.ts` modela los campos consumidos de las migraciones 001–007. No son tipos generados de un proyecto remoto. PostgREST serializa `numeric` como números JSON; cantidades extremas pueden perder precisión al parsearse en JavaScript. Esta base no utiliza esos valores para cálculos ni escrituras. Una futura presentación exacta de todo el rango `numeric(20,2)` requeriría un contrato de lectura decimal en texto o un parser JSON decimal, fuera de este bloque sin cambios de backend.
+`src/types/finance.ts` modela los campos consumidos de las migraciones 001–008. No son tipos generados de un proyecto remoto. PostgREST serializa `numeric` como números JSON; cantidades extremas pueden perder precisión al parsearse en JavaScript. Esta base no utiliza esos valores para cálculos ni escrituras. Una futura presentación exacta de todo el rango `numeric(20,2)` requeriría un contrato de lectura decimal en texto o un parser JSON decimal.
 
 ## PWA y despliegue
 
@@ -94,7 +94,7 @@ Cada intento de create/update/delete tiene un UUID propio asociado a sus paráme
 
 Los períodos cerrados son de solo lectura. Ante una versión obsoleta se avisa, se cierra la edición pendiente y se vuelve a consultar la lista antes de otro intento. Las referencias inactivas solo se pueden conservar en el campo original de una edición, tal como permite 004; no se ofrecen para movimientos nuevos. El backend sigue validando los saldos, incluidas todas las fechas afectadas por una corrección o borrado.
 
-Ajustes permite crear, renombrar, desactivar y restaurar categorías y métodos de pago usando las RPC de 003, sin borrados físicos. Los cambios de filas existentes envían `p_expected_version`. Los nombres duplicados y conflictos tienen mensajes comprensibles.
+Ajustes permite crear, renombrar y eliminar/borrar categorías y métodos de pago. Las RPC de 008 hacen borrado físico si nunca se usaron y lógico si conservan referencias históricas; los inactivos no forman una lista cotidiana. Los cambios de filas existentes envían `p_expected_version`.
 
 Cada página carga al entrar. Un evento local sencillo (`misgastos:data-changed`) invalida las lecturas montadas después de una mutación; Inicio vuelve a consultar su RPC y no reconstruye saldos. No hay caché global ni suscripciones Realtime.
 

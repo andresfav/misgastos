@@ -41,6 +41,11 @@ export async function readReferences(): Promise<References> {
     periods,
   };
 }
+export async function readCatalogManagement(): Promise<Pick<References, "categories" | "methods">> {
+  const { data, error } = await client().rpc("get_catalog_management");
+  if (error) throw error;
+  return data as Pick<References, "categories" | "methods">;
+}
 const tables = {
   expense: "expenses",
   income: "incomes",
@@ -105,10 +110,10 @@ export async function mutateMovement(
 }
 export async function mutateCatalog(
   kind: CatalogKind,
-  action: "create" | "rename" | "set",
+  action: "create" | "rename" | "delete",
   parameters: Record<string, unknown>,
 ) {
-  const rpc = action === "set" ? `set_${kind}_active` : `${action}_${kind}`;
-  const { error } = await client().rpc(rpc, parameters);
+  const { data, error } = await client().rpc(`${action}_${kind}`, parameters);
   if (error) throw error;
+  return data as { mode?: "hard_deleted" | "soft_deleted" } | null;
 }

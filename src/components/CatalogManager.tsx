@@ -18,22 +18,28 @@ function CatalogRow({
   const detail = useRef<HTMLDetailsElement>(null);
   const summary = useRef<HTMLElement>(null);
   const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [name, setName] = useState(item.name);
   const { busy, error, setError, submit } = useSubmit();
-  const mutate = (action: "rename" | "set") => {
+  const mutate = (action: "rename" | "delete") => {
     if (action === "rename" && !name.trim()) {
       setError("Introduce un nombre.");
       return;
     }
     void submit(async () => {
       try {
-        await mutateCatalog(kind, action, {
+        const result = await mutateCatalog(kind, action, {
           p_id: item.id,
           p_expected_version: item.version,
           ...(action === "rename"
             ? { p_name: name.trim() }
-            : { p_is_active: !item.is_active }),
+            : {}),
         });
+        if (action === "delete") {
+          onMessage(result?.mode === "hard_deleted"
+            ? kind === "category" ? "Categoría eliminada definitivamente." : "Método eliminado definitivamente."
+            : kind === "category" ? "Categoría borrada. Su historial se conserva." : "Método borrado. Su historial se conserva.");
+        }
       } catch (failure) {
         if (isStaleData(failure)) {
           onMessage(
@@ -44,9 +50,10 @@ function CatalogRow({
         throw failure;
       }
       setEditing(false);
+      setDeleting(false);
       if (detail.current) detail.current.open = false;
       summary.current?.focus();
-      onMessage("Cambios guardados.");
+      if (action === "rename") onMessage("Nombre actualizado.");
       refreshFinancialData();
     });
   };
@@ -87,9 +94,22 @@ function CatalogRow({
             </div>
           </fieldset>
         </form>
+      ) : deleting ? (
+        <div className="delete-confirm">
+          <p><strong>{item.has_history ? "Borrar" : "Eliminar"} {kind === "category" ? "categoría" : "método"}</strong></p>
+          <p>{item.has_history
+            ? `Dejará de aparecer en Ajustes y en los nuevos gastos. ${kind === "category" ? "Los gastos y presupuestos" : "Los gastos"} anteriores conservarán su nombre.`
+            : "Nunca se ha utilizado y se eliminará definitivamente. Esta acción no se puede deshacer."}</p>
+          <div className="form-actions">
+            <button className="button-danger" disabled={busy} onClick={() => mutate("delete")}>
+              {busy ? "Guardando…" : item.has_history ? "Borrar" : "Eliminar"}
+            </button>
+            <button className="button-secondary" disabled={busy} onClick={() => setDeleting(false)}>Cancelar</button>
+          </div>
+        </div>
       ) : (
         <div className="form-actions">
-          {item.is_active && <button
+          <button
             className="button-secondary"
             disabled={busy}
             onClick={() => {
@@ -98,13 +118,13 @@ function CatalogRow({
             }}
           >
             Renombrar
-          </button>}
+          </button>
           <button
-            className="button-quiet"
+            className="button-quiet danger-text"
             disabled={busy}
-            onClick={() => mutate("set")}
+            onClick={() => setDeleting(true)}
           >
-            {busy ? "Guardando…" : item.is_active ? "Desactivar" : "Restaurar"}
+            {item.has_history ? "Borrar" : "Eliminar"}
           </button>
         </div>
       )}
@@ -147,7 +167,6 @@ export function CatalogManager({
   };
   const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name, "es"));
   const active = sorted.filter((item) => item.is_active);
-  const inactive = sorted.filter((item) => !item.is_active);
   const rows = (entries: CatalogItem[]) => <ul className="settings-catalog-list">
     {entries.map((item) => <CatalogRow key={item.id} item={item} kind={kind} onMessage={(message) => {
       // A state change moves the row to another list; keep keyboard focus in the catalog.
@@ -175,13 +194,9 @@ export function CatalogManager({
           <ErrorMessage message={error} />
         </form>
       </details>
-      <h2 ref={listHeading} tabIndex={-1} className="settings-catalog-heading">{kind === "category" ? "Activas" : "Activos"}</h2>
+      <h2 ref={listHeading} tabIndex={-1} className="settings-catalog-heading">{title}</h2>
       {active.length ? rows(active) : <p className="muted">{kind === "category" ? "No hay categorías activas." : "No hay métodos activos."}</p>}
-      {inactive.length > 0 && <details className="settings-disclosure settings-inactive">
-        <summary className="settings-row"><span>{kind === "category" ? "Categorías inactivas" : "Métodos inactivos"} · {inactive.length}</span><span className="settings-chevron" aria-hidden="true">⌄</span></summary>
-        {rows(inactive)}
-      </details>}
-      <p className="muted settings-catalog-help">Desactivar conserva el historial. Puedes restaurar cualquier elemento más adelante.</p>
+      <p className="muted settings-catalog-help">Los elementos usados se borran de las vistas normales sin perder su historial.</p>
     </section>
   );
 }

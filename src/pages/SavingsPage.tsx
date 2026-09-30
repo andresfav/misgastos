@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { sumAmounts } from "../lib/home";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { moneyUnits, sumAmounts } from "../lib/home";
 import { ErrorMessage, Loading } from "../components/Feedback";
 import { MovementForm } from "../components/MovementForm";
 import { useRemote } from "../hooks/useRemote";
@@ -12,7 +12,7 @@ import { friendlyError, isStaleData } from "../lib/errors";
 import { formatMoney, validateMoney } from "../lib/money";
 import { readReferences } from "../lib/movements";
 import { refreshFinancialData } from "../lib/refresh";
-import { createSavings, readSavings, readSavingsHistory, renameSavings, setSavingsActive, type SavingsAccount } from "../lib/savings";
+import { correctSavingsOpeningBalance, createSavings, deleteSavings, readSavings, readSavingsHistory, renameSavings, setSavingsActive, type SavingsAccount } from "../lib/savings";
 
 function savingsError(error: unknown) {
   if ((error as { code?: string })?.code === "22023")
@@ -107,18 +107,23 @@ function QuickTransfer({ account, action, onClose, onSaved }: { account: Savings
   </section>;
 }
 
-function AccountDetail({ account, accounts, onMessage }: { account: SavingsAccount; accounts: SavingsAccount[]; onMessage: (message: string) => void }) {
+function AccountDetail({ account, accounts, onMessage, onDeleted }: { account: SavingsAccount; accounts: SavingsAccount[]; onMessage: (message: string) => void; onDeleted: (message: string) => void }) {
   const { settings } = useSetup();
   const [editing, setEditing] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [blockedBalance, setBlockedBalance] = useState<SavingsAccount["current_balance"] | null>(null);
   const [name, setName] = useState(account.name);
+  const [openingBalance, setOpeningBalance] = useState(String(account.opening_balance));
   const [action, setAction] = useState<QuickAction | null>(null);
   const { busy, error, setError, submit } = useSubmit(savingsError);
-  const mutate = (rename: boolean) => {
-    if (rename && !name.trim()) { setError("Introduce un nombre."); return; }
+  const correctAttempt = useRequestAttempt(`correct:savings-account:${account.id}`);
+  const deleteAttempt = useRequestAttempt(`delete:savings-account:${account.id}`);
+  const saveName = () => {
+    if (!name.trim()) { setError("Introduce un nombre."); return; }
     void submit(async () => {
       try {
-        if (rename) await renameSavings(account, name.trim());
-        else await setSavingsActive(account);
+        await renameSavings(account, name.trim());
       } catch (failure) {
         if (isStaleData(failure)) {
           onMessage("La cuenta ha cambiado. Recargando los datos; revisa la versión actual antes de volver a guardar.");
@@ -126,10 +131,65 @@ function AccountDetail({ account, accounts, onMessage }: { account: SavingsAccou
         }
         throw failure;
       }
-      onMessage(rename ? "Nombre actualizado." : account.is_active ? "Cuenta desactivada. Conserva su saldo e historial." : "Cuenta restaurada.");
+      setEditing(false);
+      onMessage("Nombre actualizado.");
       refreshFinancialData();
     });
   };
+  const reactivate = () => void submit(async () => {
+    try {
+      await setSavingsActive(account);
+    } catch (failure) {
+      if (isStaleData(failure)) refreshFinancialData();
+      throw failure;
+    }
+    onMessage("Cuenta reactivada. Ya puedes mover el saldo pendiente.");
+    refreshFinancialData();
+  });
+  const correctOpening = (event: FormEvent) => {
+    event.preventDefault();
+    let value: string;
+    try { value = validateMoney(openingBalance)!; }
+    catch (failure) { setError((failure as Error).message); return; }
+    const parameters = { p_id: account.id, p_opening_balance: value, p_expected_version: account.version };
+    void submit(async () => {
+      try {
+        await correctSavingsOpeningBalance(account, value, correctAttempt.requestId(parameters));
+      } catch (failure) {
+        if (isStaleData(failure)) correctAttempt.clear();
+        throw failure;
+      }
+      correctAttempt.clear();
+      setCorrecting(false);
+      onMessage("Saldo inicial corregido.");
+      refreshFinancialData();
+    });
+  };
+  const remove = () => {
+    const parameters = { p_id: account.id, p_expected_version: account.version };
+    void submit(async () => {
+      try {
+        const result = await deleteSavings(account, deleteAttempt.requestId(parameters));
+        deleteAttempt.clear();
+        if (result.mode === "blocked") {
+          setBlockedBalance(result.balance);
+          setConfirmingDelete(false);
+          return;
+        }
+        onDeleted(result.mode === "hard_deleted"
+          ? "Cuenta eliminada definitivamente junto con su saldo inicial."
+          : "Cuenta borrada. Sus movimientos anteriores se conservan.");
+        refreshFinancialData();
+      } catch (failure) {
+        if (isStaleData(failure)) {
+          deleteAttempt.clear();
+          refreshFinancialData();
+        }
+        throw failure;
+      }
+    });
+  };
+  const deleteLabel = account.can_hard_delete ? "Eliminar cuenta" : "Borrar cuenta";
   return <article className="savings-account">
     <header className="savings-account-heading">
       <h1>{account.name}</h1>
@@ -141,27 +201,50 @@ function AccountDetail({ account, accounts, onMessage }: { account: SavingsAccou
       <button className="button-secondary" disabled={busy || editing || action !== null || !accounts.some((a) => a.is_active && a.id !== account.id)} onClick={() => setAction("move")}>Mover</button>
     </div>}
     {action && account.is_active && <QuickTransfer key={action} account={account} action={action} onClose={() => setAction(null)} onSaved={() => { setAction(null); onMessage("Transferencia guardada correctamente."); }} />}
-    {!account.is_active && <p className="notice">Conserva su saldo e historial. Restáurala para registrar nuevos movimientos.</p>}
+    {!account.is_active && <p className="notice"><strong>Cuenta por revisar.</strong><br />Conserva saldo pendiente o procede de la experiencia anterior. Reactívala si necesitas mover dinero.</p>}
     <section className="savings-detail">
       <h2>Información</h2>
       <dl className="savings-facts">
         <div><dt>Saldo actual</dt><dd>{formatMoney(account.current_balance, settings!.currency)}</dd></div>
         <div><dt>Saldo inicial</dt><dd>{formatMoney(account.opening_balance, settings!.currency)}</dd></div>
         <div><dt>Fecha de inicio</dt><dd>{new Intl.DateTimeFormat("es-ES", { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${account.start_date}T12:00:00Z`))}</dd></div>
-        <div><dt>Estado</dt><dd>{account.is_active ? "Activa" : "Inactiva"}</dd></div>
+        <div><dt>Estado</dt><dd>{account.is_active ? "Activa" : "Por revisar"}</dd></div>
       </dl>
     </section>
     <History account={account} accounts={accounts} />
     <section className="savings-detail">
       <h2>Gestionar cuenta</h2>
       <ErrorMessage message={error} />
-      {editing ? <form onSubmit={(e) => { e.preventDefault(); mutate(true); }}><fieldset disabled={busy}>
+      {editing ? <form onSubmit={(e) => { e.preventDefault(); saveName(); }}><fieldset disabled={busy}>
         <label>Nuevo nombre<input autoFocus required value={name} onChange={(e) => setName(e.target.value)} /></label>
         <div className="form-actions"><button type="submit">{busy ? "Guardando…" : "Guardar nombre"}</button><button type="button" className="button-secondary" onClick={() => setEditing(false)}>Cancelar</button></div>
+      </fieldset></form> : correcting ? <form onSubmit={correctOpening}><fieldset disabled={busy}>
+        <label>Saldo inicial ({settings!.currency})<input autoFocus required inputMode="decimal" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} /><small>Solo puede corregirse antes de que la cuenta tenga movimientos o alcance un período cerrado.</small></label>
+        <div className="form-actions"><button type="submit">{busy ? "Guardando…" : "Guardar saldo inicial"}</button><button type="button" className="button-secondary" onClick={() => setCorrecting(false)}>Cancelar</button></div>
       </fieldset></form> : <div className="form-actions">
         <button className="button-secondary" disabled={busy || action !== null} onClick={() => setEditing(true)}>Renombrar</button>
-        <button className="button-secondary" disabled={busy || action !== null} onClick={() => mutate(false)}>{busy ? "Guardando…" : account.is_active ? "Desactivar cuenta" : "Restaurar cuenta"}</button>
+        {account.can_correct_opening_balance && <button className="button-secondary" disabled={busy || action !== null} onClick={() => setCorrecting(true)}>Corregir saldo inicial</button>}
+        {!account.is_active && <button className="button-secondary" disabled={busy || action !== null} onClick={reactivate}>{busy ? "Guardando…" : "Reactivar cuenta"}</button>}
       </div>}
+      <hr />
+      {blockedBalance !== null ? <div className="delete-confirm">
+        <p><strong>No puedes borrar esta cuenta todavía.</strong></p>
+        <p>Quedan {formatMoney(blockedBalance, settings!.currency)}. Mueve primero el saldo a Disponible o a otra cuenta de ahorro.</p>
+        <div className="form-actions">
+          {account.is_active ? <button onClick={() => { setBlockedBalance(null); setAction("withdraw"); }}>Mover saldo</button>
+            : <button onClick={reactivate} disabled={busy}>Reactivar cuenta</button>}
+          <button className="button-secondary" onClick={() => setBlockedBalance(null)} disabled={busy}>Cerrar</button>
+        </div>
+      </div> : confirmingDelete ? <div className="delete-confirm">
+        <p><strong>{deleteLabel}</strong></p>
+        <p>{account.can_hard_delete
+          ? "Esta cuenta no tiene movimientos asociados. Se eliminará definitivamente junto con su saldo inicial. Esta acción no se puede deshacer."
+          : "La cuenta dejará de aparecer en Ahorro. Sus movimientos anteriores se conservarán en el historial."}</p>
+        <div className="form-actions">
+          <button className="button-danger" disabled={busy} onClick={remove}>{busy ? "Guardando…" : account.can_hard_delete ? "Eliminar" : "Borrar"}</button>
+          <button className="button-secondary" disabled={busy} onClick={() => setConfirmingDelete(false)}>Cancelar</button>
+        </div>
+      </div> : <button className="button-quiet danger-text" disabled={busy || action !== null || editing || correcting} onClick={() => setConfirmingDelete(true)}>{deleteLabel}</button>}
     </section>
   </article>;
 }
@@ -170,7 +253,7 @@ function AccountList({ accounts, currency }: { accounts: SavingsAccount[]; curre
   return <ul className="savings-list">{accounts.map((account) => <li key={account.id}>
     <Link className={`savings-account-link${account.is_active ? "" : " is-inactive"}`} to={`?cuenta=${encodeURIComponent(account.id)}`}>
       <span className="savings-account-name">{account.name}</span>
-      <small>{account.is_active ? "Activa" : "Inactiva"}</small>
+      <small>{account.is_active ? "Activa" : "Saldo pendiente"}</small>
       <strong>{formatMoney(account.current_balance, currency)}</strong>
       <span className="savings-chevron" aria-hidden="true">›</span>
     </Link>
@@ -179,6 +262,7 @@ function AccountList({ accounts, currency }: { accounts: SavingsAccount[]; curre
 
 export function SavingsPage() {
   const { settings } = useSetup();
+  const navigate = useNavigate();
   const { data, loading, error, reload } = useRemote(readSavings);
   const [params] = useSearchParams();
   const selectedId = params.get("cuenta");
@@ -191,24 +275,25 @@ export function SavingsPage() {
   }, [selectedId]);
   const selected = data?.find((account) => account.id === selectedId);
   const active = data?.filter((account) => account.is_active) ?? [];
-  const inactive = data?.filter((account) => !account.is_active) ?? [];
+  const pending = data?.filter((account) => !account.is_active && moneyUnits(account.current_balance) !== 0n) ?? [];
   return <div className="savings-page" ref={page} tabIndex={-1}>
     {selectedId ? <Link className="text-link savings-back" to="/ahorro">← Ahorro</Link> : <h1>Ahorro</h1>}
     {message && <p className="notice" role="status">{message}</p>}
     <ErrorMessage message={error} />
     {error && <button onClick={reload}>Reintentar carga</button>}
     {loading ? <Loading text="Cargando cuentas de ahorro…" /> : !error && data && (selectedId ? (
-      selected ? <AccountDetail key={`${selected.id}:${selected.version}`} account={selected} accounts={data} onMessage={setMessage} />
+      selected ? <AccountDetail key={`${selected.id}:${selected.version}`} account={selected} accounts={data} onMessage={setMessage} onDeleted={(nextMessage) => { setMessage(nextMessage); navigate("/ahorro", { replace: true }); }} />
         : <p className="empty">Esta cuenta no está disponible.</p>
     ) : <>
       <dl className="savings-total"><div><dt>Total ahorrado</dt><dd>{formatMoney(sumAmounts(data.map((account) => account.current_balance)), settings!.currency)}</dd></div></dl>
-      {!data.length && !creating && <p>Aún no tienes cuentas de ahorro.</p>}
+      {!active.length && !pending.length && !creating && <p>Aún no tienes cuentas de ahorro activas.</p>}
       {!creating && <button className="savings-create-button" onClick={() => setCreating(true)}>+ Crear cuenta</button>}
       {creating && <CreateAccount onCancel={() => setCreating(false)} onDone={() => { setCreating(false); setMessage("Cuenta de ahorro creada correctamente."); }} />}
       {active.length > 0 && <AccountList accounts={active} currency={settings!.currency} />}
-      {inactive.length > 0 && <details className="savings-inactive">
-        <summary>Cuentas inactivas · {inactive.length}<span aria-hidden="true">⌄</span></summary>
-        <AccountList accounts={inactive} currency={settings!.currency} />
+      {pending.length > 0 && <details className="savings-inactive">
+        <summary>Cuentas por revisar · {pending.length}<span aria-hidden="true">⌄</span></summary>
+        <p className="muted">Estas cuentas inactivas antiguas aún conservan saldo. Revísalas para que ese dinero no quede oculto.</p>
+        <AccountList accounts={pending} currency={settings!.currency} />
       </details>}
     </>)}
   </div>;

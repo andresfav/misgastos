@@ -12,8 +12,8 @@ Modelo para construir el backend desde cero, conforme a [SPEC.md](SPEC.md). Desc
 - Las fechas financieras son `date`; los instantes técnicos, `timestamptz`. El día actual se obtiene usando la zona horaria del usuario.
 - Las columnas son obligatorias salvo que se indique «opcional». Los estados y tipos enumerados abajo son valores cerrados; no necesitan tablas de catálogo adicionales.
 - Las referencias entre datos financieros deben pertenecer al mismo usuario. Se prevén claves únicas `(user_id, id)` en las tablas referenciadas y FK compuestas `(user_id, referencia_id)`. Una FK por `id` solamente no garantiza esta regla.
-- Todas las FK `user_id → auth.users(id)` usan `ON DELETE CASCADE`. Las relaciones internas financieras y de catálogos usan `ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED` en 001, nunca cascadas que borren movimientos accidentalmente. La comprobación diferida permite eliminar todo el grafo al borrar un usuario antes de validar las FK internas. Categorías, métodos y cuentas se desactivan en el uso ordinario.
-- Los nombres de categorías, métodos de pago y cuentas de ahorro son únicos por usuario mediante `lower(btrim(name))`, incluyendo entidades inactivas. Los espacios exteriores y las diferencias de mayúsculas no permiten duplicados.
+- Todas las FK `user_id → auth.users(id)` usan `ON DELETE CASCADE`. Las relaciones internas financieras y de catálogos usan `ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED` en 001, nunca cascadas que borren movimientos accidentalmente. La comprobación diferida permite eliminar todo el grafo al borrar un usuario antes de validar las FK internas. Desde 008, los elementos nunca utilizados pueden eliminarse físicamente mediante RPC; los utilizados se borran lógicamente para conservar sus referencias.
+- Los nombres activos de categorías, métodos de pago y cuentas de ahorro son únicos por usuario mediante índices parciales sobre `lower(btrim(name))`. Los espacios exteriores y las diferencias de mayúsculas no permiten dos duplicados activos; un nombre borrado lógicamente puede reutilizarse.
 
 ## Tablas
 
@@ -41,7 +41,7 @@ Modelo para construir el backend desde cero, conforme a [SPEC.md](SPEC.md). Desc
 
 **Relaciones:** propietario en `auth.users`; referenciada por gastos y presupuestos por categoría.
 
-**Restricciones:** nombre no vacío. Desactivar y restaurar solo cambia su disponibilidad para nuevas asignaciones; no elimina referencias históricas. Renombrar actualiza el nombre mostrado también en el historial, sin duplicar categorías.
+**Restricciones:** nombre no vacío. Una categoría sin gastos ni presupuestos se elimina físicamente; si cualquiera de esas referencias existe, se marca inactiva. El borrado lógico la excluye de nuevas asignaciones sin eliminar gastos ni presupuestos históricos. Renombrar actualiza el nombre mostrado también en el historial.
 
 ### 3. `payment_methods`
 
@@ -53,7 +53,7 @@ Modelo para construir el backend desde cero, conforme a [SPEC.md](SPEC.md). Desc
 
 **Relaciones:** propietario en `auth.users`; referenciada opcionalmente por gastos.
 
-**Restricciones:** nombre no vacío. Misma regla de desactivación, restauración y renombrado que las categorías. Un método de pago no es una cuenta ni tiene saldo.
+**Restricciones:** nombre no vacío. Un método nunca usado se elimina físicamente; uno referenciado por gastos se marca inactivo y conserva esas referencias. Un método de pago no es una cuenta ni tiene saldo.
 
 ### 4. `budget_periods`
 
@@ -128,7 +128,9 @@ No se añade `previous_period_id`: el orden de la línea temporal y la operació
 
 **Restricciones:** nombre no vacío; saldo inicial no negativo. Ningún movimiento de la cuenta puede preceder a su fecha inicial. No se guarda ni se edita un saldo actual: se obtiene del saldo inicial, ingresos y transferencias.
 
-La fecha y el saldo inicial quedan fijados al crear la cuenta para impedir cambios indirectos del historial. El nombre y el estado pueden cambiar. Una cuenta inactiva conserva su historial; no se usa en nuevos movimientos ni como nueva asignación en una edición. Una corrección de un movimiento existente puede mantener su cuenta inactiva, validando los saldos.
+La apertura puede corregirse únicamente mientras la cuenta no tenga movimientos y su fecha inicial no alcance ningún período cerrado. El nombre y el estado pueden cambiar. Una cuenta inactiva conserva su historial; no se usa en nuevos movimientos ni como nueva asignación en una edición. Una corrección de un movimiento existente puede mantener su cuenta inactiva, validando los saldos.
+
+Desde 008, una cuenta sin ingresos ni transferencias se elimina físicamente si su apertura tampoco alcanza un período cerrado; el saldo inicial por sí solo no se considera movimiento. En cualquier otro caso solo puede borrarse lógicamente, y únicamente con saldo derivado actual exactamente cero. Una cuenta con saldo distinto de cero se conserva. Las cuentas inactivas heredadas con saldo cero se ocultan de las vistas normales; las que mantienen saldo aparecen como pendientes de revisión y siguen formando parte del total hasta resolverlas.
 
 El saldo de cada cuenta al final de toda fecha afectada debe ser no negativo, incluyendo las fechas posteriores afectadas por ediciones o borrados retroactivos.
 
@@ -361,11 +363,12 @@ transacción larga. Todas las RPC de esta capa requieren configuración.
   totales son cero y available es opening_balance.
 - `get_savings_balances()` devuelve un array, vacío si no hay cuentas. Incluye
   activas e inactivas con id, nombre, fecha inicial, saldo inicial, estado,
-  versión y current_balance. `private.savings_balances_at(date)` agrega de una
-  vez todos los ingresos directos, transferencias recibidas y enviadas hasta
-  el día local, a través de todos los períodos. Suma el saldo inicial incluso
-  sin movimientos. Orden: activas primero, lower(btrim(name)), id. No reutiliza
-  `check_savings`: ese helper valida una historia diaria y no devuelve saldos.
+  versión y current_balance. Desde 008, `private.savings_balances_at(date)` usa
+  `private.savings_account_balances_at(date)`, la misma fuente canónica
+  que valida el borrado, para sumar saldo inicial, ingresos directos y
+  transferencias hasta el día local a través de todos los períodos. Orden:
+  activas primero, lower(btrim(name)), id. `check_savings` sigue dedicado a
+  validar toda la historia diaria, no a devolver un saldo puntual.
 - `get_period_summary(period_id)` usa `private.period_summary_at(period_id,
   today)`, compartido con el estado actual. Devuelve `period` y los mismos
   totales al día local para open o al end_date para closed. Incluye tanto
@@ -401,3 +404,30 @@ Los helpers STABLE heredan el snapshot de **esa consulta posterior**, que ya ve
 sus cambios, no el snapshot de entrada de la RPC mutante. No se cambia el lock,
 el aislamiento requerido ni la fórmula de validación. El smoke 006 incluye create/update/delete y rechazos por saldo insuficiente para
 comprobar esta integración, además de cierres positivos y negativos mediante 005.
+
+## Borrado de catálogos y ahorro en 008
+
+008 añade `delete_category` y `delete_payment_method`, ambas con lock por usuario,
+ownership y `expected_version`. Eliminan físicamente una fila nunca utilizada;
+si existen gastos o presupuestos que la referencian, solo fijan `is_active=false`.
+Las FK continúan en `NO ACTION` y ninguna operación borra movimientos ni
+presupuestos. `get_catalog_management()` devuelve únicamente los elementos
+activos y el indicador de uso que permite presentar «Eliminar» o «Borrar»; la
+decisión se vuelve a calcular dentro de la mutación.
+
+`delete_savings_account(id,expected_version,request_id)` usa el mismo advisory
+lock, huella y journal idempotente que las mutaciones financieras. Tras el lock
+vuelve a comprobar versión, propietario, ingresos, ambos extremos de
+transferencias, contexto histórico cerrado y saldo canónico actual. Sin
+movimientos y sin alcanzar un período cerrado hace hard delete. En los demás
+casos solo hace soft delete cuando el saldo es exactamente cero. Con saldo no
+cero responde `{"mode":"blocked","code":"ACCOUNT_HAS_BALANCE","balance":...}`
+sin mutar ni registrar un éxito. Hard y soft delete devuelven un `mode` estable
+y sí quedan en `financial_operations` para que el retry sea idéntico.
+
+`correct_savings_opening_balance` es la única vía para corregir la apertura:
+requiere ausencia de movimientos y de períodos cerrados alcanzados por la fecha
+inicial, además de versión e idempotencia. Los tres índices de nombres pasan a
+ser únicos parciales sobre filas activas. No se transforma ninguna fila inactiva
+existente: saldo cero se oculta del uso normal y saldo distinto de cero permanece
+en totales y en la sección de compatibilidad «Cuentas por revisar».

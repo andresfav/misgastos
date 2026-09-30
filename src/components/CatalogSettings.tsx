@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useRemote } from "../hooks/useRemote";
-import { readReferences } from "../lib/movements";
+import { readCatalogManagement } from "../lib/movements";
 import { CatalogManager } from "./CatalogManager";
 import { ErrorMessage, Loading } from "./Feedback";
 import type { CatalogKind } from "../types/movements";
 
 export function CatalogSettings({ kind }: { kind: CatalogKind }) {
-  const { data, error, loading, reload } = useRemote(readReferences);
+  const { data, error, loading, reload } = useRemote(readCatalogManagement);
   const [message, setMessage] = useState("");
   return <>
     {message && <p className="notice success" role="status">{message}</p>}
@@ -19,4 +19,3 @@ export function CatalogSettings({ kind }: { kind: CatalogKind }) {
     </fieldset>}
   </>;
 }
-

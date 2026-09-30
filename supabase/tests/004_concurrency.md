@@ -1,6 +1,6 @@
-# 004: pruebas manuales de concurrencia (preparadas, NO ejecutadas)
+# 004/008: pruebas manuales de concurrencia (preparadas, NO ejecutadas)
 
-Usar exclusivamente una base de pruebas con 001–004 aplicadas. Dos terminales
+Usar exclusivamente una base de pruebas con 001–008 aplicadas. Dos terminales
 SQL independientes conectadas al mismo servidor como propietario, capaces de
 `SET ROLE authenticated`. No usar el editor como sustituto de dos conexiones.
 Los comandos de este documento se ejecutarán solo cuando se autorice probarlos.
@@ -136,6 +136,26 @@ Una petición nueva requiere releer la versión. Un retry exacto de `REQUEST_A`
 con expected_version 1 debe devolver el resultado original aunque la fila ya
 sea versión 2.
 
+## 5. Borrado de ahorro contra un movimiento simultáneo
+
+Fixture nuevo con cuenta de saldo inicial cero y versión 1. Abrir ambas sesiones
+con el encabezado común. En A borrar y mantener la transacción abierta:
+
+```sql
+-- A
+SELECT public.delete_savings_account('ACCOUNT_UUID',1,'REQUEST_A');
+-- B, mientras A sigue abierta
+SELECT public.create_income('DAY',10,'ACCOUNT_UUID',NULL,'REQUEST_B');
+```
+
+A devuelve `mode=hard_deleted`. B espera el mismo lock de usuario y, tras el
+COMMIT de A, falla `22023` porque la cuenta ya no existe; no deja ingreso ni
+journal para `REQUEST_B`. Repetir con fixture nuevo invirtiendo el orden: A crea
+y confirma primero el ingreso; el borrado despierta, vuelve a leer referencias y
+saldo bajo lock y devuelve `mode=blocked`, `code=ACCOUNT_HAS_BALANCE`, balance
+10. La cuenta y el ingreso permanecen. Así se comprueba específicamente que 008
+no decide con el estado anterior a adquirir el lock.
+
 ## Comprobaciones y limpieza
 
 Tras finalizar las dos sesiones, inspeccionar como propietario (nunca conceder
@@ -154,7 +174,9 @@ ORDER BY created_at, id;
 Para 1–3 comprobar explícitamente una sola transferencia y un solo registro
 `create_transfer`. Las dos operaciones de preparación (período y cuenta)
 también están en `financial_operations`: no contarlas como efectos duplicados.
-En 4 comparar la fila y las claves de edición con los resultados esperados.
+En 4 comparar la fila y las claves de edición con los resultados esperados. En
+5 comprobar además que nunca coexisten un hard delete confirmado y una nueva
+referencia confirmada a la cuenta.
 
 Solo después de cerrar las transacciones y revisar resultados, eliminar como
 propietario **únicamente** los usuarios sintéticos creados para estas pruebas:

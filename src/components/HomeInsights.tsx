@@ -107,7 +107,9 @@ function PeriodInsights({ data, currency }: { data: FinancialState; currency: Cu
 }
 function SavingsInsight({ data, currency }: { data: FinancialState; currency: Currency }) {
   const total = sumAmounts(data.savings_balances.map((account) => account.current_balance));
-  const accounts = [...data.savings_balances].sort((a, b) =>
+  // Las cuentas borradas a cero desaparecen. Una cuenta inactiva legacy con
+  // saldo sigue visible para no hacer parecer que el dinero se ha perdido.
+  const accounts = data.savings_balances.filter((account) => account.is_active || moneyUnits(account.current_balance) !== 0n).sort((a, b) =>
     moneyUnits(a.current_balance) > moneyUnits(b.current_balance) ? -1
       : moneyUnits(a.current_balance) < moneyUnits(b.current_balance) ? 1 : a.name.localeCompare(b.name, "es"));
   return <Accordion title="Ahorro" summary={formatMoney(total, currency)}>
@@ -116,7 +118,7 @@ function SavingsInsight({ data, currency }: { data: FinancialState; currency: Cu
       const share = percentage(account.current_balance, total) ?? 0;
       return <li key={account.id} className={account.is_active ? undefined : "is-inactive"}>
         <div className="category-spending-heading">
-          <h3>{account.name}{!account.is_active && <small> · Inactiva</small>}</h3>
+          <h3>{account.name}{!account.is_active && <small> · Por revisar</small>}</h3>
           <span><strong>{formatMoney(account.current_balance, currency)}</strong> · {percentLabel(share)}</span>
         </div>
         <Progress value={share} label={`${account.name}: ${percentLabel(share)} del ahorro total`} />
