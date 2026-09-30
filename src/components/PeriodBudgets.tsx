@@ -32,7 +32,6 @@ export function GeneralBudget({ period, onMessage }: { period: BudgetPeriod; onM
   const [amount, setAmount] = useState(period.general_budget ?? "");
   const { busy, error, setError, save } = useBudgetMutation(onMessage);
   return <section className="period-section">
-    <h3>Presupuesto general</h3>
     <p>Es planificación de gastos; no modifica el dinero disponible. Vacío significa sin presupuesto. 0 es un presupuesto válido.</p>
     <ErrorMessage message={error} />
     <form onSubmit={(e) => {
@@ -56,52 +55,81 @@ function usagePercent(row: BudgetUsage) {
   if (Number(row.budget_amount) === 0) return Number(row.spent) === 0 ? "No aplicable (presupuesto 0, sin gasto)" : "No aplicable (presupuesto 0 superado)";
   return `${new Intl.NumberFormat("es-ES", { maximumFractionDigits: 1 }).format(Number(row.spent) / Number(row.budget_amount) * 100)} %`;
 }
-function CategoryBudgetRow({ row, period, onMessage }: { row: BudgetUsage; period: BudgetPeriod; onMessage: (text: string) => void }) {
+// Comparar decimales sin convertir importes a coma flotante.
+function normalizedAmount(value: string | number | null) {
+  if (value === null) return null;
+  const [whole, fraction = ""] = String(value).split(".");
+  return `${whole.replace(/^0+(?=\d)/, "")}.${fraction.padEnd(2, "0")}`;
+}
+export function HistoricalCategoryBudgets({ rows }: { rows: BudgetUsage[] }) {
   const { settings } = useSetup();
-  const money = (amount: BudgetUsage["budget_amount"]) => formatMoney(amount, settings!.currency);
-  const [amount, setAmount] = useState(row.budget_amount === null ? "" : String(row.budget_amount));
-  const { busy, error, setError, save } = useBudgetMutation(onMessage);
-  const editable = period.status === "open" && (row.budget_id !== null || row.category_is_active);
-  return <li className="catalog-row">
-    <div className="catalog-name"><strong>{row.category_name}</strong>{!row.category_is_active && <span className="muted">Categoría inactiva</span>}</div>
-    <dl className="budget-facts">
-      <div><dt>Presupuesto</dt><dd>{row.budget_amount === null ? "Sin presupuesto" : money(row.budget_amount)}</dd></div>
-      <div><dt>Gasto utilizado</dt><dd>{money(row.spent)}</dd></div>
-      <div><dt>Restante del presupuesto</dt><dd>{money(row.remaining)}</dd></div>
-      <div><dt>Porcentaje utilizado</dt><dd>{usagePercent(row)}</dd></div>
-    </dl>
-    {editable && <>
-      <ErrorMessage message={error} />
-      <form onSubmit={(e) => {
-        e.preventDefault();
-        try {
-          if (!amount.trim()) throw new Error("Introduce el presupuesto; puede ser 0.");
-          const value = validateMoney(amount)!;
-          if (row.budget_id) save("update_category_budget", { p_id: row.budget_id, p_expected_version: row.budget_version, p_amount: value });
-          else save("create_category_budget", { p_period_id: period.id, p_category_id: row.category_id, p_amount: value });
-        } catch (failure) { setError((failure as Error).message); }
-      }}><fieldset disabled={busy}>
-        <label>Presupuesto de {row.category_name} ({settings!.currency})<input required inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
-        <div className="form-actions"><button type="submit">{busy ? "Guardando…" : row.budget_id ? "Guardar" : "Crear presupuesto"}</button>
-          {row.budget_id && <button type="button" className="button-secondary" onClick={() => save("delete_category_budget", { p_id: row.budget_id, p_expected_version: row.budget_version })}>Quitar</button>}
-        </div>
-      </fieldset></form>
-    </>}
-  </li>;
+  return <section>
+    <h2>Presupuesto por categoría</h2>
+    {rows.length ? <ul className="catalog-list">{rows.map((row) => <li className="period-usage-row" key={row.category_id}>
+      <strong>{row.category_name}</strong>
+      {!row.category_is_active && <small className="muted">Categoría inactiva</small>}
+      <span>{formatMoney(row.spent, settings!.currency)} / {row.budget_amount === null ? "Sin presupuesto" : formatMoney(row.budget_amount, settings!.currency)}</span>
+      <small className="muted">{usagePercent(row)}</small>
+    </li>)}</ul> : <p className="empty">No hay gastos ni presupuestos por categoría en este período.</p>}
+  </section>;
 }
 export function CategoryBudgets({ period, rows, categories, onMessage }: { period: BudgetPeriod; rows: BudgetUsage[]; categories: CatalogItem[]; onMessage: (text: string) => void }) {
+  const { settings } = useSetup();
   const all = [...rows];
-  if (period.status === "open") {
-    for (const category of categories) {
-      if (category.is_active && !rows.some((row) => row.category_id === category.id)) {
-        // Ausente de la RPC significa sin gasto y sin presupuesto.
-        all.push({ category_id: category.id, category_name: category.name, category_is_active: true, budget_id: null, budget_version: null, budget_amount: null, spent: "0", remaining: null });
-      }
+  for (const category of categories) {
+    if (category.is_active && !rows.some((row) => row.category_id === category.id)) {
+      all.push({ category_id: category.id, category_name: category.name, category_is_active: true, budget_id: null, budget_version: null, budget_amount: null, spent: "0", remaining: null });
     }
   }
+  all.sort((a, b) => a.category_name.localeCompare(b.category_name, "es"));
+  const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(all.map((row) => [row.category_id, row.budget_amount === null ? "" : String(row.budget_amount).replace(".", ",")])));
+  const { busy, error, setError, submit } = useSubmit(periodError);
+  const [saved, setSaved] = useState("");
+  const editable = (row: BudgetUsage) => period.status === "open" && (row.budget_id !== null || row.category_is_active);
+  function save(event: React.FormEvent) {
+    event.preventDefault();
+    setSaved("");
+    setError("");
+    try {
+      const changes = all.filter(editable).map((row) => {
+        try { return { row, value: validateMoney(draft[row.category_id] ?? "", { optional: true }) }; }
+        catch (failure) { throw new Error(`${row.category_name}: ${(failure as Error).message}`); }
+      }).filter(({ row, value }) => normalizedAmount(value) !== normalizedAmount(row.budget_amount));
+      if (!changes.length) { setSaved("No hay cambios que guardar."); return; }
+      void submit(async () => {
+        let completed = 0;
+        try {
+          for (const { row, value } of changes) {
+            if (row.budget_id) {
+              await periodMutation(value === null ? "delete_category_budget" : "update_category_budget", {
+                p_id: row.budget_id, p_expected_version: row.budget_version, ...(value === null ? {} : { p_amount: value }),
+              });
+            } else if (value !== null) {
+              await periodMutation("create_category_budget", { p_period_id: period.id, p_category_id: row.category_id, p_amount: value });
+            }
+            completed++;
+          }
+        } catch (failure) {
+          onMessage(`${completed ? `Se guardaron ${completed} cambios antes del error. ` : ""}${periodError(failure)} Se recargarán los límites guardados; revisa las categorías pendientes.`);
+          refreshFinancialData();
+          throw failure;
+        }
+        onMessage("Presupuestos guardados. El disponible no cambia.");
+        refreshFinancialData();
+      });
+    } catch (failure) { setError((failure as Error).message); }
+  }
   return <section className="period-section">
-    <h3>Presupuestos por categoría</h3>
-    <p>El restante de un presupuesto es un límite de planificación, no dinero disponible. Guarda cada categoría por separado.</p>
-    {all.length ? <ul className="catalog-list">{all.map((row) => <CategoryBudgetRow key={`${row.category_id}:${row.budget_id}:${row.budget_version}:${period.status}`} row={row} period={period} onMessage={onMessage} />)}</ul> : <p className="empty">{period.status === "open" ? "No hay categorías activas. Puedes crearlas en Ajustes." : "No hay gastos ni presupuestos por categoría en este período."}</p>}
+    <p>Define cuánto quieres gastar como máximo en cada categoría durante este período.</p>
+    <p className="muted">Vacío significa sin presupuesto. 0 es un límite válido. Importes en {settings!.currency}.</p>
+    <ErrorMessage message={error} />
+    {saved && <p role="status" className="muted">{saved}</p>}
+    {all.length ? <form onSubmit={save}><fieldset disabled={busy || period.status === "closed"}>
+      <div className="category-budget-editor">{all.map((row) => <label className="category-budget-input" key={row.category_id}>
+        <span>{row.category_name}{!row.category_is_active && <small className="muted">Categoría inactiva</small>}</span>
+        <input inputMode="decimal" aria-label={`Presupuesto de ${row.category_name} (${settings!.currency})`} placeholder="Sin límite" disabled={!editable(row)} value={draft[row.category_id] ?? ""} onChange={(e) => { setDraft({ ...draft, [row.category_id]: e.target.value }); setSaved(""); }} />
+      </label>)}</div>
+      {period.status === "open" && <button type="submit">{busy ? "Guardando…" : "Guardar presupuestos"}</button>}
+    </fieldset></form> : <p className="empty">No hay categorías activas. Puedes crearlas en Ajustes.</p>}
   </section>;
 }

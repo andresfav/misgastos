@@ -28,15 +28,15 @@ export function PreferencesSettings() {
     });
   }
   return (
-    <section className="card" id="preferencias">
-      <h2>Preferencias</h2>
+    <section className="settings-content" aria-label="Preferencias financieras">
       <dl className="settings-list">
         <div><dt>Moneda</dt><dd>{settings!.currency}</dd></div>
-        <div><dt>Zona horaria actual</dt><dd>{settings!.timezone}</dd></div>
       </dl>
-      <p>{settings!.currency_locked_at
-        ? "La moneda está bloqueada porque ya existe historial financiero. Podrás elegirla de nuevo después de Empezar de cero."
+      <p className="muted">{settings!.currency_locked_at
+        ? "La moneda queda fijada mientras exista historial financiero."
         : "La moneda se muestra en modo de solo lectura. Podrás elegirla de nuevo después de Empezar de cero."}</p>
+      <details className="settings-disclosure">
+        <summary className="settings-row"><span><strong>Zona horaria</strong><small>{settings!.timezone}</small></span><span className="settings-chevron" aria-hidden="true">›</span></summary>
       <form onSubmit={save}>
         <fieldset disabled={busy}>
           <label>Zona horaria
@@ -49,6 +49,7 @@ export function PreferencesSettings() {
         {error && <button type="button" className="button-secondary" disabled={busy} onClick={() => void reload()}>Consultar configuración actual</button>}
         {message && <p className="notice success" role="status">{message}</p>}
       </form>
+      </details>
     </section>
   );
 }

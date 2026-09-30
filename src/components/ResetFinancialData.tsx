@@ -17,8 +17,8 @@ export function ResetFinancialData() {
   }
   return (
     <section className="card reset-settings" id="datos">
-      <h2>Datos / Empezar de cero</h2>
-      <p>Borra todos tus datos financieros para volver a la configuración inicial. Tu cuenta y tu sesión se conservan.</p>
+      <h2>Empezar de cero</h2>
+      <p>Elimina tus datos financieros y permite configurar MisGastos otra vez. Tu cuenta, email y contraseña se conservan.</p>
       <button ref={trigger} className="button-danger" onClick={() => { setConfirmation(""); dialog.current?.showModal(); }}>Empezar de cero</button>
       <dialog ref={dialog} className="reset-dialog card" aria-labelledby="reset-title" aria-describedby="reset-description" onCancel={(event) => { if (locked.current) event.preventDefault(); }} onClose={() => trigger.current?.focus()}>
         <h2 id="reset-title">¿Empezar de cero?</h2>

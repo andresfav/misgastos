@@ -74,8 +74,9 @@ export async function periodMutation(
   rpc: "advance_period" | "set_general_budget" | "create_category_budget" | "update_category_budget" | "delete_category_budget",
   parameters: Record<string, unknown>,
 ) {
-  const { error } = await client().rpc(rpc, parameters);
+  const { data, error } = await client().rpc(rpc, parameters);
   if (error) throw error;
+  return data;
 }
 export function shiftDay(date: string, days: number) {
   const result = new Date(`${date}T12:00:00Z`);

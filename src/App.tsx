@@ -97,7 +97,9 @@ function AppRoutes() {
           <Route path="/anadir" element={<AddPage />} />
           <Route path="/ahorro" element={<SavingsPage />} />
           <Route path="/ajustes" element={<SettingsPage />} />
+          <Route path="/ajustes/:section" element={<SettingsPage />} />
           <Route path="/ajustes/periodos" element={<PeriodsPage />} />
+          <Route path="/ajustes/periodos/:periodId" element={<PeriodsPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

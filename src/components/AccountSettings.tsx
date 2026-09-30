@@ -27,12 +27,10 @@ export function AccountSettings() {
     });
   }
   return (
-    <section className="card" id="cuenta">
-      <h2>Cuenta</h2>
+    <section className="settings-content" aria-label="Datos de cuenta">
       <dl className="settings-list"><div><dt>Email</dt><dd>{session?.user.email}</dd></div></dl>
-      <LogoutButton />
-      <details>
-        <summary>Cambiar contraseña</summary>
+      <details className="settings-disclosure">
+        <summary className="settings-row"><span>Cambiar contraseña</span><span className="settings-chevron" aria-hidden="true">›</span></summary>
         <form onSubmit={save}>
           <fieldset disabled={busy}>
             <label>Nueva contraseña
@@ -48,6 +46,7 @@ export function AccountSettings() {
           {message && <p className="notice success" role="status">{message}</p>}
         </form>
       </details>
+      <div className="settings-logout"><LogoutButton /></div>
     </section>
   );
 }

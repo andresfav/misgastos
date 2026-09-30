@@ -29,6 +29,7 @@ export function MovementForm({
   onConflict,
   onCancel,
   initialTransfer,
+  initialDate,
 }: {
   kind: MovementKind;
   refs: References;
@@ -36,12 +37,13 @@ export function MovementForm({
   onSaved: () => void;
   onConflict: () => void;
   onCancel?: () => void;
+  initialDate?: string;
   initialTransfer?: { from: string; to: string };
 }) {
   const { settings } = useSetup();
   const today = todayIn(settings!.timezone);
   const [draft, setDraft] = useState(() => ({
-    ...movementDraft(today, row),
+    ...movementDraft(!row && initialDate ? initialDate : today, row),
     ...(!row && kind === "transfer" ? initialTransfer : {}),
   }));
   const { busy, error, setError, submit } = useSubmit(movementError);
