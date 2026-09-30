@@ -805,3 +805,44 @@ textarea:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Ajustes */
+.settings-sections {
+  display: grid;
+  gap: 24px;
+}
+.settings-sections > *,
+.settings-sections .catalog-grid > * {
+  min-width: 0;
+}
+.settings-sections .catalog-grid {
+  margin-top: 0;
+}
+.settings-sections summary {
+  cursor: pointer;
+  padding: 14px 0;
+  color: var(--green);
+  font-weight: 600;
+}
+.settings-sections summary:focus-visible {
+  outline: 3px solid #b2782a;
+  outline-offset: 3px;
+}
+.reset-settings {
+  border-color: #f0c3bb;
+}
+.reset-dialog {
+  width: min(600px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  color: #233b32;
+}
+.reset-dialog::backdrop {
+  background: rgb(20 35 28 / 65%);
+}
+.reset-dialog ul {
+  padding-left: 22px;
+}
+.reset-dialog button:disabled {
+  cursor: not-allowed;
+}

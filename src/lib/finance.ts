@@ -34,6 +34,22 @@ export async function configureSettings(currency: Currency, timezone: string) {
   if (error) throw error;
   return data as Settings;
 }
+export async function updateTimezone(settings: Settings, timezone: string) {
+  const { data, error } = await client().rpc("configure_user_settings", {
+    p_currency: settings.currency,
+    p_timezone: timezone,
+    p_expected_version: settings.version,
+  });
+  if (error) throw error;
+  return data as Settings;
+}
+export async function resetFinancialData(confirmation: string) {
+  const { data, error } = await client().rpc("reset_financial_data", {
+    p_confirmation: confirmation,
+  });
+  if (error) throw error;
+  if (data?.reset !== true) throw new Error("Respuesta de reset inesperada");
+}
 export async function createFirstPeriod(
   input: FirstPeriodInput,
   requestId: string,

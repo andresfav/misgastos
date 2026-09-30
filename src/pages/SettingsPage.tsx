@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
-import { useSetup } from "../hooks/useSetup";
 import { useRemote } from "../hooks/useRemote";
 import { readReferences } from "../lib/movements";
 import { CatalogManager } from "../components/CatalogManager";
 import { ErrorMessage, Loading } from "../components/Feedback";
+import { AccountSettings } from "../components/AccountSettings";
+import { PreferencesSettings } from "../components/PreferencesSettings";
+import { ResetFinancialData } from "../components/ResetFinancialData";
+
 export function SettingsPage() {
-  const { session } = useAuth();
-  const { settings } = useSetup();
   const { data, error, loading, reload } = useRemote(readReferences);
   const [message, setMessage] = useState("");
   return (
@@ -26,54 +26,42 @@ export function SettingsPage() {
           Actualizar
         </button>
       </div>
-      <section className="card">
-        <h2>Configuración actual</h2>
-        <dl className="settings-list">
-          <div>
-            <dt>Cuenta</dt>
-            <dd>{session?.user.email}</dd>
-          </div>
-          <div>
-            <dt>Moneda</dt>
-            <dd>{settings!.currency}</dd>
-          </div>
-          <div>
-            <dt>Zona horaria</dt>
-            <dd>{settings!.timezone}</dd>
-          </div>
-        </dl>
-      </section>
-      <section className="card period-settings-link">
-        <h2>Períodos y presupuestos</h2>
-        <p>Consulta tu período actual, abre el siguiente y planifica tus gastos.</p>
-        <Link className="button" to="/ajustes/periodos">Gestionar períodos y presupuestos</Link>
-      </section>
-      {message && (
-        <p className="notice" role="status">
-          {message}
-        </p>
-      )}
-      <ErrorMessage message={error} />
-      {error && <button onClick={reload}>Reintentar</button>}
-      {loading ? (
-        <Loading />
-      ) : (
-        data &&
-        !error && (
-          <div className="catalog-grid">
-            <CatalogManager
-              kind="category"
-              items={data.categories}
-              onMessage={setMessage}
-            />
-            <CatalogManager
-              kind="payment_method"
-              items={data.methods}
-              onMessage={setMessage}
-            />
-          </div>
-        )
-      )}
+      <div className="settings-sections">
+        <AccountSettings />
+        <PreferencesSettings />
+        {message && (
+          <p className="notice" role="status">
+            {message}
+          </p>
+        )}
+        <ErrorMessage message={error} />
+        {error && <button onClick={reload}>Reintentar</button>}
+        {loading ? (
+          <Loading />
+        ) : (
+          data &&
+          !error && (
+            <div className="catalog-grid">
+              <CatalogManager
+                kind="category"
+                items={data.categories}
+                onMessage={setMessage}
+              />
+              <CatalogManager
+                kind="payment_method"
+                items={data.methods}
+                onMessage={setMessage}
+              />
+            </div>
+          )
+        )}
+        <section className="card" id="periodos">
+          <h2>Períodos y presupuestos</h2>
+          <p>Consulta tu período actual, abre el siguiente y planifica tus gastos.</p>
+          <Link className="button" to="/ajustes/periodos">Gestionar períodos y presupuestos</Link>
+        </section>
+        <ResetFinancialData />
+      </div>
     </>
   );
 }

@@ -46,7 +46,7 @@ function PrivateRoutes() {
 }
 function SetupGate() {
   const setup = useSetup();
-  if (setup.loading) return <Loading />;
+  if (setup.loading) return <Loading text={setup.resetting ? "Borrando datos financieros y comprobando el resultado…" : "Cargando…"} />;
   if (setup.error)
     return (
       <main className="standalone card">
