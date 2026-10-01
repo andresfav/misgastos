@@ -29,6 +29,7 @@ export function MovementForm({
   onConflict,
   onCancel,
   initialTransfer,
+  initialIncomeAccount,
   initialDate,
 }: {
   kind: MovementKind;
@@ -39,12 +40,16 @@ export function MovementForm({
   onCancel?: () => void;
   initialDate?: string;
   initialTransfer?: { from: string; to: string };
+  initialIncomeAccount?: string;
 }) {
   const { settings } = useSetup();
   const today = todayIn(settings!.timezone);
   const [draft, setDraft] = useState(() => ({
     ...movementDraft(!row && initialDate ? initialDate : today, row),
     ...(!row && kind === "transfer" ? initialTransfer : {}),
+    ...(!row && kind === "income" && initialIncomeAccount
+      ? { account: initialIncomeAccount }
+      : {}),
   }));
   const { busy, error, setError, submit } = useSubmit(movementError);
   const attempt = useRequestAttempt(

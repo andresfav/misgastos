@@ -17,6 +17,11 @@ function CreateMovementPage() {
   const requestedDate = searchParams.get("fecha");
   const initialDate = kind === "income" && requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
     && !Number.isNaN(Date.parse(requestedDate)) && new Date(requestedDate).toISOString().slice(0, 10) === requestedDate ? requestedDate : undefined;
+  const initialTransfer = kind === "transfer" ? {
+    from: searchParams.get("origen") || "",
+    to: searchParams.get("destino") || "",
+  } : undefined;
+  const initialIncomeAccount = kind === "income" ? searchParams.get("cuenta") || undefined : undefined;
   const [message, setMessage] = useState("");
   return (
     <>
@@ -55,9 +60,11 @@ function CreateMovementPage() {
           <section className="card form-card">
             <h2>{movementLabels[kind]}</h2>
             <MovementForm
-              key={`${kind}:${initialDate ?? ""}`}
+              key={`${kind}:${initialDate ?? ""}:${initialTransfer?.from ?? ""}:${initialTransfer?.to ?? ""}:${initialIncomeAccount ?? ""}`}
               kind={kind}
               initialDate={initialDate}
+              initialTransfer={initialTransfer}
+              initialIncomeAccount={initialIncomeAccount}
               refs={data}
               onSaved={() =>
                 setMessage(kind === "transfer" ? "Transferencia guardada." : `${movementLabels[kind]} guardado.`)

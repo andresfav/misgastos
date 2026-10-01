@@ -1270,6 +1270,13 @@ textarea:focus-visible {
 .savings-account-heading h1 { overflow-wrap: anywhere; }
 .savings-quick-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .savings-quick-actions button { flex: 1 1 auto; padding-inline: 14px; }
+.savings-add-dialog { width: calc(100% - 24px); max-width: 520px; margin: auto; border: 1px solid var(--border); border-radius: 20px; padding: 20px; background: #fff; color: #233b32; }
+.savings-add-dialog::backdrop { background: rgb(20 35 28 / 55%); }
+.savings-add-dialog .detail-heading { margin-bottom: 20px; }
+.savings-add-options { display: grid; gap: 10px; margin-bottom: 20px; }
+.savings-add-option { display: grid; gap: 5px; width: 100%; padding: 16px; color: #233b32; text-align: left; background: #edf2ec; border: 1px solid var(--border); }
+.savings-add-option:hover { background: #e1ebe0; }
+.savings-add-option span { font-weight: 400; font-size: 0.9rem; line-height: 1.4; }
 .savings-account .savings-detail h2 { font-size: 1.1rem; margin-bottom: 16px; }
 .savings-account .savings-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 16px; }
 .savings-account .savings-facts dd { margin: 4px 0 0; overflow-wrap: anywhere; }

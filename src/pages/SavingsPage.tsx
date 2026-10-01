@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { moneyUnits, sumAmounts } from "../lib/home";
 import { ErrorMessage, Loading } from "../components/Feedback";
-import { MovementForm } from "../components/MovementForm";
 import { useRemote } from "../hooks/useRemote";
 import { useSubmit } from "../hooks/useSubmit";
 import { useRequestAttempt } from "../hooks/useRequestAttempt";
@@ -10,7 +9,6 @@ import { useSetup } from "../hooks/useSetup";
 import { formatDate, todayIn } from "../lib/dates";
 import { friendlyError, isStaleData } from "../lib/errors";
 import { formatMoney, validateMoney } from "../lib/money";
-import { readReferences } from "../lib/movements";
 import { refreshFinancialData } from "../lib/refresh";
 import { correctSavingsOpeningBalance, createSavings, deleteSavings, readSavings, readSavingsHistory, renameSavings, setSavingsActive, type SavingsAccount } from "../lib/savings";
 
@@ -55,7 +53,7 @@ function CreateAccount({ onDone, onCancel }: { onDone: () => void; onCancel: () 
         <label>Nombre<input autoFocus required value={name} onChange={(e) => setName(e.target.value)} /></label>
         <div className="form-row">
           <label>Fecha de inicio<input required type="date" max={todayIn(settings!.timezone)} value={date} onChange={(e) => setDate(e.target.value)} /></label>
-          <label>Saldo inicial ({settings!.currency})<input required inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} /><small>Igual o mayor que 0, con hasta dos decimales.</small></label>
+          <label>Saldo inicial ({settings!.currency})<input required inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} /><small>Dinero que ya existe en esta cuenta al empezar a usar MisGastos. No se registra como ingreso.<br />Igual o mayor que 0, con hasta dos decimales.</small></label>
         </div>
         <div className="form-actions">
           <button type="submit">{busy ? "Creando…" : "Crear cuenta de ahorro"}</button>
@@ -91,31 +89,51 @@ function History({ account, accounts }: { account: SavingsAccount; accounts: Sav
   </section>;
 }
 
-type QuickAction = "add" | "withdraw" | "move";
-function QuickTransfer({ account, action, onClose, onSaved }: { account: SavingsAccount; action: QuickAction; onClose: () => void; onSaved: () => void }) {
-  const { data, loading, error, reload } = useRemote(readReferences);
-  const other = data?.accounts.find((a) => a.is_active && a.id !== account.id);
-  const active = data?.accounts.some((a) => a.id === account.id && a.is_active);
-  return <section className="savings-detail">
-    <h3>{action === "add" ? "Añadir dinero" : action === "withdraw" ? "Retirar dinero" : "Mover a otra cuenta"}</h3>
-    <ErrorMessage message={error} />
-    {error && <button onClick={reload}>Reintentar carga</button>}
-    {loading ? <Loading /> : !error && data && (active && (action !== "move" || other) ?
-      <MovementForm kind="transfer" refs={data} initialTransfer={{ from: action === "add" ? "" : account.id, to: action === "add" ? account.id : action === "move" ? other!.id : "" }} onSaved={onSaved} onConflict={reload} onCancel={onClose} />
-      : <p className="notice">{!active ? "Esta cuenta ya no está activa." : "Necesitas otra cuenta de ahorro activa para mover dinero."}</p>)}
-    {(loading || error || !active || (action === "move" && !other)) && <button className="button-secondary" onClick={onClose}>Cerrar</button>}
-  </section>;
+function AddMoneyChoice({ onChoose, onClose }: {
+  onChoose: (choice: "available" | "income") => void;
+  onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const unmounting = useRef(false);
+  useEffect(() => {
+    const node = dialog.current!;
+    node.showModal();
+    return () => {
+      unmounting.current = true;
+      node.close();
+    };
+  }, []);
+  return <dialog ref={dialog} className="savings-add-dialog card" aria-labelledby="savings-add-title" onClose={() => { if (!unmounting.current) onClose(); }}>
+    <div className="detail-heading">
+      <h2 id="savings-add-title">Añadir dinero</h2>
+      <button type="button" className="button-quiet" onClick={() => dialog.current?.close()}>Cerrar</button>
+    </div>
+    <div className="savings-add-options">
+      <button type="button" className="savings-add-option" onClick={() => onChoose("available")}>
+        <strong>Desde Disponible</strong>
+        <span>Mueve dinero que ya tienes disponible a esta cuenta.</span>
+      </button>
+      <button type="button" className="savings-add-option" onClick={() => onChoose("income")}>
+        <strong>Nuevo ingreso</strong>
+        <span>Registra dinero nuevo recibido directamente en esta cuenta de ahorro.</span>
+      </button>
+    </div>
+    <div className="form-actions">
+      <button type="button" className="button-secondary" onClick={() => dialog.current?.close()}>Cancelar</button>
+    </div>
+  </dialog>;
 }
 
 function AccountDetail({ account, accounts, onMessage, onDeleted }: { account: SavingsAccount; accounts: SavingsAccount[]; onMessage: (message: string) => void; onDeleted: (message: string) => void }) {
   const { settings } = useSetup();
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [blockedBalance, setBlockedBalance] = useState<SavingsAccount["current_balance"] | null>(null);
   const [name, setName] = useState(account.name);
   const [openingBalance, setOpeningBalance] = useState(String(account.opening_balance));
-  const [action, setAction] = useState<QuickAction | null>(null);
+  const [choosingAdd, setChoosingAdd] = useState(false);
   const { busy, error, setError, submit } = useSubmit(savingsError);
   const correctAttempt = useRequestAttempt(`correct:savings-account:${account.id}`);
   const deleteAttempt = useRequestAttempt(`delete:savings-account:${account.id}`);
@@ -190,17 +208,29 @@ function AccountDetail({ account, accounts, onMessage, onDeleted }: { account: S
     });
   };
   const deleteLabel = account.can_hard_delete ? "Eliminar cuenta" : "Borrar cuenta";
+  const openAddFlow = (choice: "available" | "income") => {
+    const params = new URLSearchParams({ tipo: choice === "available" ? "transfer" : "income" });
+    if (choice === "available") params.set("destino", account.id);
+    else params.set("cuenta", account.id);
+    navigate(`/anadir?${params.toString()}`);
+  };
+  const openTransferFlow = (destination?: string) => {
+    const params = new URLSearchParams({ tipo: "transfer", origen: account.id });
+    if (destination) params.set("destino", destination);
+    navigate(`/anadir?${params.toString()}`);
+  };
+  const otherActiveAccount = accounts.find((item) => item.is_active && item.id !== account.id);
   return <article className="savings-account">
     <header className="savings-account-heading">
       <h1>{account.name}</h1>
       <p className="savings-balance">{formatMoney(account.current_balance, settings!.currency)}</p>
     </header>
     {account.is_active && <div className="savings-quick-actions">
-      <button disabled={busy || editing || action !== null} onClick={() => setAction("add")}>Añadir dinero</button>
-      <button className="button-secondary" disabled={busy || editing || action !== null} onClick={() => setAction("withdraw")}>Retirar</button>
-      <button className="button-secondary" disabled={busy || editing || action !== null || !accounts.some((a) => a.is_active && a.id !== account.id)} onClick={() => setAction("move")}>Mover</button>
+      <button disabled={busy || editing || choosingAdd} onClick={() => setChoosingAdd(true)}>Añadir dinero</button>
+      <button className="button-secondary" disabled={busy || editing || choosingAdd} onClick={() => openTransferFlow()}>Retirar a Disponible</button>
+      <button className="button-secondary" disabled={busy || editing || choosingAdd || !otherActiveAccount} onClick={() => openTransferFlow(otherActiveAccount?.id)}>Mover a otra cuenta</button>
     </div>}
-    {action && account.is_active && <QuickTransfer key={action} account={account} action={action} onClose={() => setAction(null)} onSaved={() => { setAction(null); onMessage("Transferencia guardada correctamente."); }} />}
+    {choosingAdd && <AddMoneyChoice onClose={() => setChoosingAdd(false)} onChoose={openAddFlow} />}
     {!account.is_active && <p className="notice"><strong>Cuenta por revisar.</strong><br />Conserva saldo pendiente o procede de la experiencia anterior. Reactívala si necesitas mover dinero.</p>}
     <section className="savings-detail">
       <h2>Información</h2>
@@ -222,16 +252,16 @@ function AccountDetail({ account, accounts, onMessage, onDeleted }: { account: S
         <label>Saldo inicial ({settings!.currency})<input autoFocus required inputMode="decimal" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} /><small>Solo puede corregirse antes de que la cuenta tenga movimientos o alcance un período cerrado.</small></label>
         <div className="form-actions"><button type="submit">{busy ? "Guardando…" : "Guardar saldo inicial"}</button><button type="button" className="button-secondary" onClick={() => setCorrecting(false)}>Cancelar</button></div>
       </fieldset></form> : <div className="form-actions">
-        <button className="button-secondary" disabled={busy || action !== null} onClick={() => setEditing(true)}>Renombrar</button>
-        {account.can_correct_opening_balance && <button className="button-secondary" disabled={busy || action !== null} onClick={() => setCorrecting(true)}>Corregir saldo inicial</button>}
-        {!account.is_active && <button className="button-secondary" disabled={busy || action !== null} onClick={reactivate}>{busy ? "Guardando…" : "Reactivar cuenta"}</button>}
+        <button className="button-secondary" disabled={busy || choosingAdd} onClick={() => setEditing(true)}>Renombrar</button>
+        {account.can_correct_opening_balance && <button className="button-secondary" disabled={busy || choosingAdd} onClick={() => setCorrecting(true)}>Corregir saldo inicial</button>}
+        {!account.is_active && <button className="button-secondary" disabled={busy || choosingAdd} onClick={reactivate}>{busy ? "Guardando…" : "Reactivar cuenta"}</button>}
       </div>}
       <hr />
       {blockedBalance !== null ? <div className="delete-confirm">
         <p><strong>No puedes borrar esta cuenta todavía.</strong></p>
         <p>Quedan {formatMoney(blockedBalance, settings!.currency)}. Mueve primero el saldo a Disponible o a otra cuenta de ahorro.</p>
         <div className="form-actions">
-          {account.is_active ? <button onClick={() => { setBlockedBalance(null); setAction("withdraw"); }}>Mover saldo</button>
+          {account.is_active ? <button onClick={() => { setBlockedBalance(null); openTransferFlow(); }}>Mover saldo</button>
             : <button onClick={reactivate} disabled={busy}>Reactivar cuenta</button>}
           <button className="button-secondary" onClick={() => setBlockedBalance(null)} disabled={busy}>Cerrar</button>
         </div>
@@ -244,7 +274,7 @@ function AccountDetail({ account, accounts, onMessage, onDeleted }: { account: S
           <button className="button-danger" disabled={busy} onClick={remove}>{busy ? "Guardando…" : account.can_hard_delete ? "Eliminar" : "Borrar"}</button>
           <button className="button-secondary" disabled={busy} onClick={() => setConfirmingDelete(false)}>Cancelar</button>
         </div>
-      </div> : <button className="button-quiet danger-text" disabled={busy || action !== null || editing || correcting} onClick={() => setConfirmingDelete(true)}>{deleteLabel}</button>}
+      </div> : <button className="button-quiet danger-text" disabled={busy || choosingAdd || editing || correcting} onClick={() => setConfirmingDelete(true)}>{deleteLabel}</button>}
     </section>
   </article>;
 }
