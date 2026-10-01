@@ -41,6 +41,30 @@ export async function readReferences(): Promise<References> {
     periods,
   };
 }
+export async function readExpenseReferences(
+  currentCategoryId?: string,
+): Promise<References> {
+  const [categoryResult, methods, accounts, periods] = await Promise.all([
+    client().rpc("get_expense_categories", {
+      p_current_category_id: currentCategoryId ?? null,
+    }),
+    readAll<CatalogItem>("payment_methods", "id,name,is_active,version"),
+    readAll<SavingsOption>(
+      "savings_accounts",
+      "id,name,is_active,version,start_date",
+    ),
+    readAll<Period>("budget_periods", "id,mode,start_date,end_date,status"),
+  ]);
+  if (categoryResult.error) throw categoryResult.error;
+  const byName = (a: CatalogItem, b: CatalogItem) =>
+    a.name.localeCompare(b.name, "es");
+  return {
+    categories: categoryResult.data as CatalogItem[],
+    methods: methods.sort(byName),
+    accounts: accounts.sort(byName),
+    periods,
+  };
+}
 export async function readCatalogManagement(): Promise<Pick<References, "categories" | "methods">> {
   const { data, error } = await client().rpc("get_catalog_management");
   if (error) throw error;
@@ -85,12 +109,15 @@ export async function readMovements() {
   return sortMovements(groups.flat());
 }
 export async function readMovementForEdit(kind: MovementKind, id: string) {
-  const [result, refs] = await Promise.all([
-    client().from(tables[kind]).select(columns[kind]).eq("id", id).maybeSingle(),
-    readReferences(),
-  ]);
+  const result = await client().from(tables[kind]).select(columns[kind]).eq("id", id).maybeSingle();
   if (result.error) throw result.error;
-  return { row: result.data ? { ...(result.data as unknown as Omit<Movement, "kind">), kind } as Movement : null, refs };
+  const row = result.data
+    ? ({ ...(result.data as unknown as Omit<Movement, "kind">), kind } as Movement)
+    : null;
+  const refs = kind === "expense"
+    ? await readExpenseReferences(row?.kind === "expense" ? row.category_id : undefined)
+    : await readReferences();
+  return { row, refs };
 }
 export async function readMovementScreen() {
   const [rows, refs] = await Promise.all([readMovements(), readReferences()]);

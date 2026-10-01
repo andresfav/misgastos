@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useRemote } from "../hooks/useRemote";
-import { readReferences } from "../lib/movements";
+import { readExpenseReferences, readReferences } from "../lib/movements";
 import { movementLabels, type MovementKind } from "../types/movements";
 import { ErrorMessage, Loading } from "../components/Feedback";
 import { EditMovementPage } from "./EditMovementPage";
 import { MovementForm } from "../components/MovementForm";
 function CreateMovementPage() {
-  const { data, error, loading, reload } = useRemote(readReferences);
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedKind = searchParams.get("tipo");
   const kind: MovementKind = requestedKind === "income" || requestedKind === "transfer"
     ? requestedKind : "expense";
+  const { data, error, loading, reload } = useRemote(
+    kind === "expense" ? readExpenseReferences : readReferences,
+  );
   const requestedDate = searchParams.get("fecha");
   const initialDate = kind === "income" && requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
     && !Number.isNaN(Date.parse(requestedDate)) && new Date(requestedDate).toISOString().slice(0, 10) === requestedDate ? requestedDate : undefined;

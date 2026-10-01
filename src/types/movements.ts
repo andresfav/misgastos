@@ -7,6 +7,7 @@ export interface CatalogItem {
   is_active: boolean;
   version: number;
   has_history?: boolean;
+  expense_count?: number;
 }
 export interface SavingsOption extends CatalogItem {
   start_date: string;
