@@ -1323,7 +1323,25 @@ textarea:focus-visible {
 .settings-catalog-help { margin-top: 20px; font-size: 0.8rem; }
 .settings-page .form-actions { flex-wrap: wrap; }
 .settings-page .form-actions button { max-width: 100%; }
-.settings-page .reset-settings { padding: 20px; }
+.settings-page .reset-settings { padding: 4px 0 8px; }
+.data-settings > .data-disclosure { border-bottom: 1px solid var(--border); }
+.data-settings > .data-disclosure:first-child { border-top: 1px solid var(--border); }
+.data-settings .settings-row-detail { padding-top: 8px; }
+.export-settings { display: grid; gap: 24px; }
+.export-settings > section + section { padding-top: 20px; border-top: 1px solid var(--border); }
+.export-settings h3 { margin-bottom: 6px; font-size: 1rem; }
+.export-range { display: grid; gap: 10px; margin: 16px 0; }
+.export-range legend { margin-bottom: 8px; font-weight: 650; }
+.export-range > label { display: flex; align-items: center; gap: 9px; margin: 0; font-weight: 500; }
+.export-range input[type="radio"] { flex: 0 0 auto; width: auto; min-height: auto; }
+.export-range .export-subfield { display: grid; align-items: stretch; gap: 6px; margin-left: 28px; }
+.export-date-range { display: grid; gap: 12px; margin-left: 28px; }
+.export-date-range label { margin: 0; }
+.danger-disclosure { border-color: #f0c3bb !important; }
+.danger-disclosure > summary strong { color: #9c3023; }
+@media (min-width: 600px) {
+  .export-date-range { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 /* Configuración de períodos: acordeones y editor compacto. */
 .periods-page, .periods-page .card, .period-accordions { min-width: 0; }

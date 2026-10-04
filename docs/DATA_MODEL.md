@@ -431,3 +431,41 @@ inicial, además de versión e idempotencia. Los tres índices de nombres pasan 
 ser únicos parciales sobre filas activas. No se transforma ninguna fila inactiva
 existente: saldo cero se oculta del uso normal y saldo distinto de cero permanece
 en totales y en la sección de compatibilidad «Cuentas por revisar».
+
+## Contrato de exportación en 010
+
+`get_data_export(start_date DEFAULT NULL, end_date DEFAULT NULL)` es una RPC
+`STABLE`, `SECURITY DEFINER`, de solo lectura. Obtiene la identidad exclusivamente
+de `auth.uid()`, exige configuración financiera y filtra por propietario en cada
+tabla y relación. `anon` y `PUBLIC` no pueden ejecutarla. Dos fechas `NULL`
+significan todo el historial hasta el día local; de lo contrario ambas son
+obligatorias, inclusivas, ordenadas y no posteriores a `private.read_today()`.
+
+El resultado contiene `settings` no sensibles, `range`, movimientos reales,
+snapshots de saldo, cuentas de ahorro, períodos, presupuestos, categorías y
+métodos de pago. No incluye Auth, secretos ni `financial_operations`. Los
+importes se devuelven como texto decimal exacto para que JSON/JavaScript no los
+convierta implícitamente a coma flotante. Las referencias inactivas conservadas
+por historia se resuelven mediante sus filas existentes.
+
+`movements` contiene exclusivamente ingresos, gastos y transferencias. Cada
+transferencia aparece una vez. `balances` contiene registros sintéticos
+`opening`/`closing`, separados de los movimientos y sin `referencia_id`. Para
+Disponible reutiliza `private.available_at`; para ahorro reutiliza
+`private.savings_account_balances_at`. En un rango, el snapshot inicial refleja
+el estado anterior a los movimientos del primer día y el final incluye todos los
+movimientos del último día. Las cuentas que empiezan dentro del rango presentan
+su `opening_balance` en su fecha real de inicio.
+
+Los `opening_balance` de períodos y cuentas siguen siendo estado inicial, nunca
+filas de `incomes`. El saldo inicial de un período posterior sigue siendo el
+arrastre de su predecesor: puede repetirse como snapshot junto al saldo final
+anterior para explicar la frontera, pero no se suma como dinero nuevo. La
+exportación no persiste saldos, no modifica estadísticas y no cambia ninguna
+fórmula financiera.
+
+El CSV cliente combina ambas colecciones con `clase = Movimiento|Saldo`; usa
+punto y coma, CRLF y UTF-8 con BOM, sin línea `sep=`, y conserva importes sin
+símbolo con la moneda separada. El XLSX mantiene movimientos y saldos en hojas
+distintas y añade las hojas de configuración legible. La construcción del XLSX
+es local y no altera el contrato SQL.

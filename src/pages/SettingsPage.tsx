@@ -6,7 +6,7 @@ import { AppSignature } from "../components/AppSignature";
 const AccountSettings = lazy(() => import("../components/AccountSettings").then((module) => ({ default: module.AccountSettings })));
 const PreferencesSettings = lazy(() => import("../components/PreferencesSettings").then((module) => ({ default: module.PreferencesSettings })));
 const CatalogSettings = lazy(() => import("../components/CatalogSettings").then((module) => ({ default: module.CatalogSettings })));
-const ResetFinancialData = lazy(() => import("../components/ResetFinancialData").then((module) => ({ default: module.ResetFinancialData })));
+const DataSettings = lazy(() => import("../components/DataSettings").then((module) => ({ default: module.DataSettings })));
 
 const sections = [
   ["cuenta", "Cuenta", "Email, contraseña y sesión"],
@@ -14,7 +14,7 @@ const sections = [
   ["categorias", "Categorías", "Organiza tus tipos de gasto"],
   ["metodos", "Métodos de pago", "Tarjetas, efectivo, etc."],
   ["periodos", "Períodos y presupuestos", "Período actual y planificación"],
-  ["datos", "Datos", "Empezar de cero"],
+  ["datos", "Datos", "Exporta o elimina tus datos"],
 ];
 
 function SettingsView({ title, children }: { title: string; children: ReactNode }) {
@@ -56,6 +56,6 @@ export function SettingsPage() {
     {section === "preferencias" && <PreferencesSettings />}
     {section === "categorias" && <CatalogSettings kind="category" />}
     {section === "metodos" && <CatalogSettings kind="payment_method" />}
-    {section === "datos" && <ResetFinancialData />}
+    {section === "datos" && <DataSettings />}
   </SettingsView>;
 }
