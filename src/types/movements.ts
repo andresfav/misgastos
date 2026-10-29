@@ -1,6 +1,6 @@
 import type { Period } from "./finance";
 export type MovementKind = "expense" | "income" | "transfer";
-export type CatalogKind = "category" | "payment_method";
+export type CatalogKind = "category" | "payment_method" | "external_expense_source";
 export interface CatalogItem {
   id: string;
   name: string;
@@ -23,6 +23,8 @@ interface BaseMovement {
 }
 export interface Expense extends BaseMovement {
   kind: "expense";
+  funding_type: "available" | "external";
+  external_source_id: string | null;
   category_id: string;
   payment_method_id: string | null;
   merchant: string | null;
@@ -42,6 +44,7 @@ export type Movement = Expense | Income | Transfer;
 export interface References {
   categories: CatalogItem[];
   methods: CatalogItem[];
+  external_sources: CatalogItem[];
   accounts: SavingsOption[];
   periods: Period[];
 }

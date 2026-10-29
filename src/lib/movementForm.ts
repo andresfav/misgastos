@@ -4,6 +4,8 @@ export interface MovementDraft {
   date: string;
   amount: string;
   description: string;
+  funding: "available" | "external";
+  externalSource: string;
   category: string;
   method: string;
   merchant: string;
@@ -18,6 +20,8 @@ export function movementDraft(today: string, row?: Movement): MovementDraft {
     date: row?.date || today,
     amount: row ? String(row.amount) : "",
     description: row?.description || "",
+    funding: row?.kind === "expense" ? row.funding_type : "available",
+    externalSource: row?.kind === "expense" ? row.external_source_id || "" : "",
     category: row?.kind === "expense" ? row.category_id : "",
     method: row?.kind === "expense" ? row.payment_method_id || "" : "",
     merchant: row?.kind === "expense" ? row.merchant || "" : "",
@@ -95,8 +99,13 @@ export function movementParameters(
       throw new Error(
         "Selecciona un método de pago activo o deja el campo vacío.",
       );
+    if (draft.funding === "external" && !refs.external_sources.some(
+      (source) => source.id === draft.externalSource && (source.is_active || source.id === old?.external_source_id),
+    )) throw new Error("Selecciona un origen externo activo. Puedes crearlo en Ajustes.");
     return {
       ...base,
+      p_funding_type: draft.funding,
+      p_external_source_id: draft.funding === "external" ? draft.externalSource : null,
       p_category_id: draft.category,
       p_payment_method_id: draft.method || null,
       p_merchant: optional(draft.merchant),

@@ -17,11 +17,18 @@ export interface Period {
   end_date: string | null;
   status: "open" | "closed";
 }
+export interface FundingBreakdown {
+  funding_type: "available" | "external";
+  external_source_id: string | null;
+  name: string;
+  amount: string;
+}
 export interface FinancialState {
   as_of_date: string;
   current_period: Period | null;
   available: Money | null;
   expenses_total: Money | null;
+  expenses_funding_breakdown?: FundingBreakdown[];
   income_total: Money | null;
   general_budget: Money | null;
   general_budget_remaining: Money | null;

@@ -80,7 +80,9 @@ BEGIN
     PERFORM public.delete_expense(expense_id, 2, gen_random_uuid());
     rows := public.get_expense_categories();
     IF (SELECT (item->>'expense_count')::bigint FROM pg_catalog.jsonb_array_elements(rows) item
-        WHERE (item->>'id')::uuid = cat_ten) <> 8 THEN
+        WHERE (item->>'id')::uuid = cat_ten) <> 9
+      OR (SELECT (item->>'expense_count')::bigint FROM pg_catalog.jsonb_array_elements(rows) item
+        WHERE (item->>'id')::uuid = cat_three) <> 3 THEN
         RAISE EXCEPTION 'el borrado de gasto no actualizó la frecuencia';
     END IF;
 
@@ -109,8 +111,8 @@ BEGIN
     SELECT id INTO cat_b_beta FROM public.create_category('  Beta nueva ');
     SELECT id INTO cat_b_alpha FROM public.create_category('alfa nueva');
     rows := public.get_expense_categories();
-    IF (rows->0->>'id')::uuid <> cat_b_alpha
-      OR (rows->1->>'id')::uuid <> cat_b
+    IF (rows->0->>'id')::uuid <> cat_b
+      OR (rows->1->>'id')::uuid <> cat_b_alpha
       OR (rows->2->>'id')::uuid <> cat_b_beta THEN
         RAISE EXCEPTION 'usuario sin gastos no se ordenó alfabéticamente';
     END IF;

@@ -1,3 +1,4 @@
+import { FundingBreakdown } from "../components/FundingBreakdown";
 import { Link } from "react-router-dom";
 import { useRemote } from "../hooks/useRemote";
 import { readFinancialState } from "../lib/finance";
@@ -41,6 +42,7 @@ export function HomePage() {
             <small>Los ingresos incluyen los de ahorro.</small>
           </p>
         </section>
+        <FundingBreakdown rows={data.expenses_funding_breakdown} currency={settings!.currency} />
         <HomeInsights data={data} currency={settings!.currency} />
       </>}
     </div>

@@ -1,3 +1,4 @@
+import { FundingBreakdown } from "../components/FundingBreakdown";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { ErrorMessage, Loading } from "../components/Feedback";
@@ -44,6 +45,7 @@ function Summary({ summary }: { summary: PeriodSummary }) {
   ];
   return <>
     <p className="muted">A {formatDate(summary.as_of_date)}.</p>
+    <FundingBreakdown rows={summary.expenses_funding_breakdown} currency={settings!.currency} />
     <dl className="budget-facts">{amounts.map(([label, amount]) => <div key={label}><dt>{label}</dt><dd>{amount === null ? "Sin presupuesto" : formatMoney(amount, settings!.currency)}</dd></div>)}</dl>
   </>;
 }

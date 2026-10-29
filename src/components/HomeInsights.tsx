@@ -1,3 +1,4 @@
+import { FundingBreakdown } from "./FundingBreakdown";
 import { lazy, Suspense, useCallback, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useRemote } from "../hooks/useRemote";
@@ -61,6 +62,7 @@ function PeriodInsights({ data, currency }: { data: FinancialState; currency: Cu
         {budgetCategories.length ? <ul className="insight-list">{budgetCategories.map((row) => <li key={row.category_id}>
           <h3>{row.category_name}{!row.category_is_active && <small> · Inactiva</small>}</h3>
           <BudgetDetail spent={row.spent} budget={row.budget_amount!} remaining={row.remaining} currency={currency} />
+          <FundingBreakdown rows={row.funding_breakdown} currency={currency} />
         </li>)}</ul> : <p>No has fijado presupuestos por categoría para este período.</p>}
       </>}
       <Link className="text-link" to="/ajustes/periodos">Configurar presupuestos →</Link>

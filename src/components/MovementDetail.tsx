@@ -7,7 +7,7 @@ import { formatMoney } from "../lib/money";
 import { formatDate } from "../lib/dates";
 import { movementError, isStaleData } from "../lib/errors";
 import { refreshFinancialData } from "../lib/refresh";
-import { accountName, movementContext } from "../lib/movementHistory";
+import { accountName, expenseOrigin, movementContext } from "../lib/movementHistory";
 import { movementLabels, type Movement, type References } from "../types/movements";
 import type { Currency } from "../types/finance";
 import { ErrorMessage } from "./Feedback";
@@ -90,6 +90,7 @@ export function MovementDetail({ row, refs, currency, returnTo, onClose, onDelet
     <dl className="detail-facts">
       <div><dt>Fecha</dt><dd>{formatDate(row.date)}</dd></div>
       {row.kind === "expense" && <>
+        <div><dt>Origen del gasto</dt><dd>{expenseOrigin(row, refs)}{row.funding_type === "external" && " · Externo"}</dd></div>
         <div><dt>Categoría</dt><dd>{movementContext(row, refs)}</dd></div>
         <div><dt>Método de pago</dt><dd>{row.payment_method_id ? refs.methods.find((method) => method.id === row.payment_method_id)?.name || "Método no disponible" : "Sin método"}</dd></div>
         <div><dt>Comercio</dt><dd>{row.merchant || "Sin comercio"}</dd></div>

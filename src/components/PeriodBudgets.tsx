@@ -1,3 +1,4 @@
+import { FundingBreakdown } from "./FundingBreakdown";
 import { useState } from "react";
 import { useSetup } from "../hooks/useSetup";
 import { useSubmit } from "../hooks/useSubmit";
@@ -70,6 +71,7 @@ export function HistoricalCategoryBudgets({ rows }: { rows: BudgetUsage[] }) {
       {!row.category_is_active && <small className="muted">Categoría inactiva</small>}
       <span>{formatMoney(row.spent, settings!.currency)} / {row.budget_amount === null ? "Sin presupuesto" : formatMoney(row.budget_amount, settings!.currency)}</span>
       <small className="muted">{usagePercent(row)}</small>
+      <FundingBreakdown rows={row.funding_breakdown} currency={settings!.currency} />
     </li>)}</ul> : <p className="empty">No hay gastos ni presupuestos por categoría en este período.</p>}
   </section>;
 }

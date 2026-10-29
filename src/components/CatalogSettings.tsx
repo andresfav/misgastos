@@ -15,7 +15,7 @@ export function CatalogSettings({ kind }: { kind: CatalogKind }) {
     {loading && !data && <Loading />}
     {data && <fieldset className="catalog-loading" disabled={loading || !!error} aria-busy={loading}>
       {loading && <Loading text="Actualizando…" />}
-      <CatalogManager kind={kind} items={kind === "category" ? data.categories : data.methods} onMessage={setMessage} />
+      <CatalogManager kind={kind} items={kind === "category" ? data.categories : kind === "payment_method" ? data.methods : data.external_sources} onMessage={setMessage} />
     </fieldset>}
   </>;
 }

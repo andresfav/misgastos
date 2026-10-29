@@ -57,6 +57,8 @@ export function movementError(error: unknown): string {
       return "La categoría ya no está disponible. Actualiza y selecciona una categoría activa.";
     if (/Método/i.test(message))
       return "El método de pago ya no está disponible. Actualiza y elige otro o deja el campo vacío.";
+    if (/Origen externo|Origen del gasto/i.test(message))
+      return "Selecciona un origen externo activo o elige Disponible. Puedes gestionar los orígenes en Ajustes.";
     if (/Cuenta/i.test(message))
       return "Revisa las cuentas de ahorro: deben estar disponibles y existir en la fecha elegida.";
     if (/Movimiento no encontrado/i.test(message))

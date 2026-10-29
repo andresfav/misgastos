@@ -5,7 +5,7 @@ import { useSetup } from "../hooks/useSetup";
 import { readMovementScreen } from "../lib/movements";
 import { formatMoney } from "../lib/money";
 import { formatDate } from "../lib/dates";
-import { filterHistory, sortHistory, historyLabels, movementContext, movementDescription, type HistoryKind, type HistoryFilters as Filters, type HistorySort } from "../lib/movementHistory";
+import { filterHistory, sortHistory, historyLabels, expenseOrigin, movementContext, movementDescription, type HistoryKind, type HistoryFilters as Filters, type HistorySort } from "../lib/movementHistory";
 import { movementLabels, type Movement } from "../types/movements";
 import { ErrorMessage, Loading } from "../components/Feedback";
 import { HistoryFilters, filterKeys } from "../components/HistoryFilters";
@@ -65,7 +65,7 @@ export function MovementsPage() {
             <td className={`history-amount ${row.kind}`}>{amount(row)}</td>
             <td><span className="history-truncate" title={context(row)}>{context(row)}</span></td>
             <td><button className="history-open" onClick={() => setSelected(row)} aria-label={`Ver ${movementLabels[row.kind].toLowerCase()} del ${formatDate(row.date)}, ${amount(row)}: ${movementDescription(row)}`}>
-              <span className="history-truncate">{movementDescription(row)}</span><span aria-hidden="true">›</span>
+              <span className="history-truncate">{row.kind === "expense" && `${expenseOrigin(row, data.refs)}${row.funding_type === "external" ? " (externo)" : ""} · `}{movementDescription(row)}</span><span aria-hidden="true">›</span>
             </button></td>
           </tr>)}</tbody>
         </table>
@@ -73,7 +73,7 @@ export function MovementsPage() {
           <button className="history-mobile-row" onClick={() => setSelected(row)}>
             <time dateTime={row.date}>{formatDate(row.date)}</time><strong className={`history-amount ${row.kind}`}>{amount(row)}</strong>
             <span className="history-mobile-context">{row.kind === "transfer" && kind !== "all" && <span className="history-type-label">Transferencia · </span>}{context(row)}</span>
-            <span className="history-truncate">{movementDescription(row)}</span><span className="history-chevron" aria-hidden="true">›</span>
+            <span className="history-truncate">{row.kind === "expense" && `${expenseOrigin(row, data.refs)}${row.funding_type === "external" ? " (externo)" : ""} · `}{movementDescription(row)}</span><span className="history-chevron" aria-hidden="true">›</span>
           </button>
         </li>)}</ul>
       </> : <section className="history-empty">

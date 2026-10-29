@@ -1,7 +1,7 @@
 import { client } from "./supabase";
 import { friendlyError } from "./errors";
 import { periodDates } from "./dates";
-import type { Money, Period, PeriodMode } from "../types/finance";
+import type { FundingBreakdown, Money, Period, PeriodMode } from "../types/finance";
 
 export const periodLabels: Record<PeriodMode, string> = {
   monthly: "Mensual", annual: "Anual", custom: "Personalizado", between_paydays: "Entre cobros",
@@ -18,6 +18,7 @@ export interface PeriodSummary {
   available: Money;
   income_total: Money;
   expenses_total: Money;
+  expenses_funding_breakdown?: FundingBreakdown[];
   general_budget: Money | null;
   general_budget_remaining: Money | null;
   income_to_available: Money;
@@ -33,6 +34,7 @@ export interface BudgetUsage {
   budget_version: number | null;
   budget_amount: Money | null;
   spent: Money;
+  funding_breakdown?: FundingBreakdown[];
   remaining: Money | null;
 }
 export async function readPeriods() {

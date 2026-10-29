@@ -37,8 +37,8 @@ function CatalogRow({
         });
         if (action === "delete") {
           onMessage(result?.mode === "hard_deleted"
-            ? kind === "category" ? "Categoría eliminada definitivamente." : "Método eliminado definitivamente."
-            : kind === "category" ? "Categoría borrada. Su historial se conserva." : "Método borrado. Su historial se conserva.");
+            ? kind === "category" ? "Categoría eliminada definitivamente." : kind === "external_expense_source" ? "Origen externo eliminado definitivamente." : "Método eliminado definitivamente."
+            : kind === "category" ? "Categoría borrada. Su historial se conserva." : kind === "external_expense_source" ? "Origen externo borrado. Su historial se conserva." : "Método borrado. Su historial se conserva.");
         }
       } catch (failure) {
         if (isStaleData(failure)) {
@@ -96,7 +96,7 @@ function CatalogRow({
         </form>
       ) : deleting ? (
         <div className="delete-confirm">
-          <p><strong>{item.has_history ? "Borrar" : "Eliminar"} {kind === "category" ? "categoría" : "método"}</strong></p>
+          <p><strong>{item.has_history ? "Borrar" : "Eliminar"} {kind === "category" ? "categoría" : kind === "external_expense_source" ? "origen externo" : "método"}</strong></p>
           <p>{item.has_history
             ? `Dejará de aparecer en Ajustes y en los nuevos gastos. ${kind === "category" ? "Los gastos y presupuestos" : "Los gastos"} anteriores conservarán su nombre.`
             : "Nunca se ha utilizado y se eliminará definitivamente. Esta acción no se puede deshacer."}</p>
@@ -147,7 +147,7 @@ export function CatalogManager({
   const listHeading = useRef<HTMLHeadingElement>(null);
   const [name, setName] = useState("");
   const { busy, error, setError, submit } = useSubmit();
-  const title = kind === "category" ? "Categorías" : "Métodos de pago";
+  const title = kind === "category" ? "Categorías" : kind === "external_expense_source" ? "Orígenes externos" : "Métodos de pago";
   const create = (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim()) {
@@ -160,7 +160,7 @@ export function CatalogManager({
       if (creator.current) creator.current.open = false;
       createTrigger.current?.focus();
       onMessage(
-        kind === "category" ? "Categoría creada." : "Método de pago creado.",
+        kind === "category" ? "Categoría creada." : kind === "external_expense_source" ? "Origen externo creado." : "Método de pago creado.",
       );
       refreshFinancialData();
     });
@@ -177,14 +177,14 @@ export function CatalogManager({
   return (
     <section className="settings-content" aria-label={title}>
       <details ref={creator} className="settings-disclosure settings-create">
-        <summary ref={createTrigger} className="button button-secondary">{kind === "category" ? "+ Nueva categoría" : "+ Nuevo método"}</summary>
+        <summary ref={createTrigger} className="button button-secondary">{kind === "category" ? "+ Nueva categoría" : kind === "external_expense_source" ? "+ Nuevo origen externo" : "+ Nuevo método"}</summary>
         <form onSubmit={create}>
           <fieldset disabled={busy}>
             <label>Nombre
-              <input required value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === "category" ? "Por ejemplo, Alimentación" : "Por ejemplo, Tarjeta"} />
+              <input required value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === "category" ? "Por ejemplo, Alimentación" : kind === "external_expense_source" ? "Por ejemplo, Tarjeta familiar" : "Por ejemplo, Tarjeta"} />
             </label>
             <div className="form-actions">
-              <button type="submit">{busy ? "Creando…" : kind === "category" ? "Crear categoría" : "Crear método"}</button>
+              <button type="submit">{busy ? "Creando…" : kind === "category" ? "Crear categoría" : kind === "external_expense_source" ? "Crear origen externo" : "Crear método"}</button>
               <button type="button" className="button-secondary" onClick={() => {
                 if (creator.current) creator.current.open = false;
                 setName(""); setError(""); createTrigger.current?.focus();
@@ -195,7 +195,7 @@ export function CatalogManager({
         </form>
       </details>
       <h2 ref={listHeading} tabIndex={-1} className="settings-catalog-heading">{title}</h2>
-      {active.length ? rows(active) : <p className="muted">{kind === "category" ? "No hay categorías activas." : "No hay métodos activos."}</p>}
+      {active.length ? rows(active) : <p className="muted">{kind === "category" ? "No hay categorías activas." : kind === "external_expense_source" ? "No hay orígenes externos activos." : "No hay métodos activos."}</p>}
       <p className="muted settings-catalog-help">Los elementos usados se borran de las vistas normales sin perder su historial.</p>
     </section>
   );

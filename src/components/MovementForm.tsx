@@ -170,6 +170,22 @@ export function MovementForm({
         </div>
         {kind === "expense" && (
           <>
+            <label>Origen del gasto
+              <select value={draft.funding} onChange={(e) => set("funding", e.target.value as MovementDraft["funding"])}>
+                <option value="available">Disponible</option><option value="external">Externo</option>
+              </select>
+              <small>{draft.funding === "available" ? "Sale de tu dinero disponible en MisGastos." : "Cuenta como gasto y para tus presupuestos, pero no reduce Disponible."}</small>
+            </label>
+            {draft.funding === "external" && <>
+              <label>Origen externo
+                <select required value={draft.externalSource} onChange={(e) => set("externalSource", e.target.value)}>
+                  <option value="">Selecciona un origen</option>
+                  {refs.external_sources.filter((source) => source.is_active || source.id === oldExpense?.external_source_id).map((source) =>
+                    <option key={source.id} value={source.id}>{source.name}{!source.is_active ? " (inactivo, actual)" : ""}</option>)}
+                </select>
+              </label>
+              <small><Link to="/ajustes/origenes">Gestionar orígenes externos en Ajustes</Link></small>
+            </>}
             <label>
               Categoría
               <select

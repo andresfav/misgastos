@@ -1,9 +1,12 @@
 import { movementLabels, type Movement, type References } from "../types/movements";
 export type HistoryKind = Movement["kind"] | "all";
 export const historyLabels: Record<HistoryKind, string> = { expense: "Gastos", income: "Ingresos", transfer: "Transferencias", all: "Todos" };
-export interface HistoryFilters { category: string; method: string; origin: string; destination: string; from: string; until: string; search: string }
+export interface HistoryFilters { category: string; method: string; funding: string; origin: string; destination: string; from: string; until: string; search: string }
 export function accountName(id: string | null, refs: References) {
   return id === null ? "Disponible" : refs.accounts.find((account) => account.id === id)?.name || "Cuenta no disponible";
+}
+export function expenseOrigin(row: Extract<Movement, { kind: "expense" }>, refs: References) {
+  return row.funding_type === "external" ? refs.external_sources.find((source) => source.id === row.external_source_id)?.name || "Origen externo no disponible" : "Disponible";
 }
 export function movementContext(row: Movement, refs: References) {
   if (row.kind === "expense") return refs.categories.find((category) => category.id === row.category_id)?.name || "Categoría no disponible";
@@ -20,13 +23,14 @@ export function filterHistory(rows: Movement[], kind: HistoryKind, filters: Hist
     if (kind !== "all" && row.kind !== kind) return false;
     if (filters.from && row.date < filters.from || filters.until && row.date > filters.until) return false;
     if (kind === "expense" && row.kind === "expense") {
+      if (filters.funding && (filters.funding === "available" ? row.funding_type !== "available" : filters.funding === "external" ? row.funding_type !== "external" : row.external_source_id !== filters.funding)) return false;
       if (filters.category && row.category_id !== filters.category) return false;
       if (filters.method && (row.payment_method_id ?? "none") !== filters.method) return false;
     }
     if (kind === "income" && row.kind === "income" && !matchesAccount(filters.destination, row.savings_account_id)) return false;
     if (kind === "transfer" && row.kind === "transfer" && (!matchesAccount(filters.origin, row.from_savings_account_id) || !matchesAccount(filters.destination, row.to_savings_account_id))) return false;
     const search = normalize(filters.search.trim());
-    const related = row.kind === "expense" ? [row.merchant, row.note, refs.methods.find((method) => method.id === row.payment_method_id)?.name] : [];
+    const related = row.kind === "expense" ? [expenseOrigin(row, refs), row.merchant, row.note, refs.methods.find((method) => method.id === row.payment_method_id)?.name] : [];
     return !search || normalize([row.description, movementContext(row, refs), movementLabels[row.kind], ...related].filter(Boolean).join(" ")).includes(search);
   });
 }

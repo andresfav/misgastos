@@ -89,7 +89,7 @@ No se añade `previous_period_id`: el orden de la línea temporal y la operació
 
 ### 5. `expenses`
 
-**Propósito:** salidas de dinero disponible.
+**Propósito:** consumo registrado, financiado desde Disponible o desde un origen externo.
 
 **PK:** `id uuid`.
 
@@ -97,6 +97,7 @@ No se añade `previous_period_id`: el orden de la línea temporal y la operació
 
 - `user_id`, `period_id uuid`, `date date`, `amount numeric(20,2)`.
 - `category_id uuid`.
+- Desde 011: `funding_type text NOT NULL DEFAULT 'available'` (`available` / `external`); `external_source_id uuid` opcional. Un check exige origen solo para `external`; FK compuesta `(user_id, external_source_id)` al catálogo propio.
 - `description text`, `payment_method_id uuid`, `merchant text`, `note text`: opcionales.
 - `is_recurring boolean`: inicialmente falso; solo una marca, sin automatización.
 
@@ -217,7 +218,7 @@ Quedan para la siguiente migración de lógica backend: policies RLS y acceso au
 
 ## Decisiones de alcance
 
-Se proponen exactamente las diez tablas anteriores. El presupuesto general reside en `budget_periods`; los presupuestos de categoría necesitan su tabla por ser múltiples. Disponible no es una cuenta persistida, y los destinos de ingresos y transferencias se deducen de sus referencias opcionales.
+Las migraciones 001–010 tienen las diez tablas anteriores. 011 añade `external_expense_sources`. El presupuesto general reside en `budget_periods`; los presupuestos de categoría necesitan su tabla por ser múltiples. Disponible no es una cuenta persistida, y los destinos de ingresos y transferencias se deducen de sus referencias opcionales.
 
 No se añaden tablas para comercios, notas, recurrencias automáticas, monedas, tipos de período ni perfiles que dupliquen Auth. Tampoco hace falta un libro mayor adicional: gastos, ingresos y transferencias son la fuente de los movimientos; solo el cierre de período conserva un saldo final.
 
@@ -234,7 +235,7 @@ a `numeric(20,2)`, sin redondeo y sin valores no finitos.
 Cada fecha se interpreta como un **cierre diario neto**, sin orden intradía por
 UUID, creación o actualización. El disponible al cierre de D es el saldo inicial
 del período, más ingresos a disponible y transferencias ahorro → disponible con
-fecha ≤ D, menos gastos y transferencias disponible → ahorro con fecha ≤ D.
+fecha ≤ D, menos gastos con `funding_type = 'available'` y transferencias disponible → ahorro con fecha ≤ D (desde 011).
 Solo se exige disponible ≥ 0 en fechas que contienen al menos una transferencia
 disponible → ahorro. En el mismo día, todos los movimientos se compensan; un
 ingreso de un día posterior nunca financia una transferencia anterior. Un gasto
@@ -297,7 +298,7 @@ permite insertar un período antes de historia ya existente.
 
 El cierre usa exclusivamente disponible: saldo inicial + ingresos a disponible
 + transferencias ahorro → disponible − transferencias disponible → ahorro −
-gastos. Excluye ingresos directos a ahorro, transferencias entre ahorros y todos
+gastos con `funding_type = 'available'` (desde 011). Excluye gastos externos, ingresos directos a ahorro, transferencias entre ahorros y todos
 los presupuestos. `private.available_daily` centraliza esta fórmula y el neto
 por DATE; 005 reemplaza `private.check_available` para consumirla, conservando
 las reglas de 004. `private.available_at` toma el último cierre diario hasta la
@@ -469,3 +470,65 @@ punto y coma, CRLF y UTF-8 con BOM, sin línea `sep=`, y conserva importes sin
 símbolo con la moneda separada. El XLSX mantiene movimientos y saldos en hojas
 distintas y añade las hojas de configuración legible. La construcción del XLSX
 es local y no altera el contrato SQL.
+
+
+## 011 — Orígenes externos de gastos
+
+Los gastos externos **sí son gastos**: consumen presupuesto general y por categoría
+y cuentan en estadísticas, evolución y totales de consumo. **No reducen Disponible**.
+El origen financiero es independiente de `payment_methods`: por ejemplo, método
+Tarjeta y origen externo Itaú. El catálogo no tiene saldo y no modela deuda,
+tarjetas de crédito ni una segunda cuenta financiera.
+
+### `external_expense_sources`
+
+`id`, `user_id`, `name`, `is_active`, `created_at`, `updated_at`, `version`.
+Nombres no vacíos; únicos por usuario entre activos sobre `lower(btrim(name))`.
+RLS permite solo SELECT propio; no hay DML directo para clientes. Crear,
+renombrar y borrar usan el lock común; renombrar y borrar exigen `expected_version`.
+Sin referencias se elimina físicamente; con gastos históricos se desactiva.
+El nombre desactivado sigue resolviendo en historial, desgloses y exportaciones;
+puede reutilizarse para una fuente nueva con otro UUID. Renombrar cambia también
+el nombre mostrado en historia, igual que categorías y métodos.
+
+Todos los gastos anteriores reciben `available` mediante el default NOT NULL.
+El check exige `external_source_id IS NULL` para `available` y una fuente para
+`external`; la FK compuesta impide referencias cruzadas entre usuarios.
+Una edición puede conservar su propia fuente inactiva; un alta o nueva asignación
+requiere una fuente activa.
+
+Disponible = saldo inicial + ingresos a Disponible + ahorro → Disponible
+− Disponible → ahorro − **solo gastos available**.
+`private.available_daily` sigue siendo la fuente canónica para `available_at`,
+`check_available`, cierres, arrastres y snapshots exportados. Las ediciones
+validan desde la menor fecha original/nueva; los cambios de financiación no
+pueden invalidar retiradas posteriores a ahorro. Se conservan fechas locales,
+período abierto, ownership, lock común, expected_version e idempotencia.
+
+`private.expense_funding_breakdown` agrupa por tipo y UUID de origen, con importes
+exactos en texto. Resúmenes exponen `expenses_funding_breakdown`; presupuesto
+por categoría expone `funding_breakdown`. No se filtran externos en los totales
+presupuestarios. El cliente presenta el desglose y no calcula Disponible.
+
+Las RPC `create_expense_with_funding` / `update_expense_with_funding` reciben
+`p_funding_type` y `p_external_source_id`. Las firmas originales permanecen:
+crear usa Disponible y editar conserva el origen existente. Ambas APIs llaman
+al mismo core privado; la antigua mantiene la huella original de idempotencia,
+incluidos reintentos registrados antes de 011. Delete reutiliza el helper
+canónico sin cambiar su contrato. No hay overloads ambiguos en PostgREST.
+
+`get_data_export` añade `funding_type` y `external_source` a movimientos y el
+catálogo `external_sources`. `origin` resuelve el nombre de la fuente para gastos
+externos. CSV y XLSX de historial añaden al final `origen_gasto` (Disponible /
+Externo) y `origen_externo`; los movimientos que no son gasto y las filas de saldo
+los dejan vacíos. XLSX completo añade columnas equivalentes y hoja de orígenes.
+No se crean snapshots de saldo para fuentes externas.
+
+Reset borra gastos antes del catálogo de orígenes, en la misma transacción,
+y conserva el usuario Auth. No se crea Itaú automáticamente: se registra como
+un nombre de catálogo desde Ajustes → Orígenes externos.
+
+Despliegue: **migración 011 → deploy del frontend**. El frontend previo sigue
+operando mediante las firmas antiguas; el nuevo requiere la tabla y RPC de 011.
+La migración notifica a PostgREST para recargar su esquema. Consultar
+[EXTERNAL_EXPENSES_TESTING.md](EXTERNAL_EXPENSES_TESTING.md) antes de producción.

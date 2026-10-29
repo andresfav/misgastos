@@ -23,7 +23,7 @@ async function readAll<T>(table: string, columns: string): Promise<T[]> {
   }
 }
 export async function readReferences(): Promise<References> {
-  const [categories, methods, accounts, periods] = await Promise.all([
+  const [categories, methods, accounts, periods, external_sources] = await Promise.all([
     readAll<CatalogItem>("categories", "id,name,is_active,version"),
     readAll<CatalogItem>("payment_methods", "id,name,is_active,version"),
     readAll<SavingsOption>(
@@ -31,12 +31,14 @@ export async function readReferences(): Promise<References> {
       "id,name,is_active,version,start_date",
     ),
     readAll<Period>("budget_periods", "id,mode,start_date,end_date,status"),
+    readAll<CatalogItem>("external_expense_sources", "id,name,is_active,version"),
   ]);
   const byName = (a: CatalogItem, b: CatalogItem) =>
     a.name.localeCompare(b.name, "es");
   return {
     categories: categories.sort(byName),
     methods: methods.sort(byName),
+    external_sources: external_sources.sort(byName),
     accounts: accounts.sort(byName),
     periods,
   };
@@ -44,7 +46,7 @@ export async function readReferences(): Promise<References> {
 export async function readExpenseReferences(
   currentCategoryId?: string,
 ): Promise<References> {
-  const [categoryResult, methods, accounts, periods] = await Promise.all([
+  const [categoryResult, methods, accounts, periods, external_sources] = await Promise.all([
     client().rpc("get_expense_categories", {
       p_current_category_id: currentCategoryId ?? null,
     }),
@@ -54,6 +56,7 @@ export async function readExpenseReferences(
       "id,name,is_active,version,start_date",
     ),
     readAll<Period>("budget_periods", "id,mode,start_date,end_date,status"),
+    readAll<CatalogItem>("external_expense_sources", "id,name,is_active,version"),
   ]);
   if (categoryResult.error) throw categoryResult.error;
   const byName = (a: CatalogItem, b: CatalogItem) =>
@@ -61,14 +64,15 @@ export async function readExpenseReferences(
   return {
     categories: categoryResult.data as CatalogItem[],
     methods: methods.sort(byName),
+    external_sources: external_sources.sort(byName),
     accounts: accounts.sort(byName),
     periods,
   };
 }
-export async function readCatalogManagement(): Promise<Pick<References, "categories" | "methods">> {
+export async function readCatalogManagement(): Promise<Pick<References, "categories" | "methods" | "external_sources">> {
   const { data, error } = await client().rpc("get_catalog_management");
   if (error) throw error;
-  return data as Pick<References, "categories" | "methods">;
+  return data as Pick<References, "categories" | "methods" | "external_sources">;
 }
 const tables = {
   expense: "expenses",
@@ -78,7 +82,7 @@ const tables = {
 // Solicitar el numeric como texto evita redondearlo al abrir una edición.
 const common = "id,period_id,date,amount::text,description,created_at,version";
 const columns = {
-  expense: `${common},category_id,payment_method_id,merchant,note,is_recurring`,
+  expense: `${common},category_id,payment_method_id,merchant,note,is_recurring,funding_type,external_source_id`,
   income: `${common},savings_account_id`,
   transfer: `${common},from_savings_account_id,to_savings_account_id`,
 };
@@ -129,7 +133,7 @@ export async function mutateMovement(
   parameters: Record<string, unknown>,
   requestId: string,
 ) {
-  const { error } = await client().rpc(`${operation}_${kind}`, {
+  const { error } = await client().rpc(`${operation}_${kind}${kind === "expense" && operation !== "delete" ? "_with_funding" : ""}`, {
     ...parameters,
     p_request_id: requestId,
   });

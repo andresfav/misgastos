@@ -12,6 +12,7 @@ const sections = [
   ["cuenta", "Cuenta", "Email, contraseña y sesión"],
   ["preferencias", "Preferencias", "Moneda y zona horaria"],
   ["categorias", "Categorías", "Organiza tus tipos de gasto"],
+  ["origenes", "Orígenes externos", "Registra gastos que no reducen Disponible"],
   ["metodos", "Métodos de pago", "Tarjetas, efectivo, etc."],
   ["periodos", "Períodos y presupuestos", "Período actual y planificación"],
   ["datos", "Datos", "Exporta o elimina tus datos"],
@@ -55,6 +56,7 @@ export function SettingsPage() {
     {section === "cuenta" && <AccountSettings />}
     {section === "preferencias" && <PreferencesSettings />}
     {section === "categorias" && <CatalogSettings kind="category" />}
+    {section === "origenes" && <CatalogSettings kind="external_expense_source" />}
     {section === "metodos" && <CatalogSettings kind="payment_method" />}
     {section === "datos" && <DataSettings />}
   </SettingsView>;

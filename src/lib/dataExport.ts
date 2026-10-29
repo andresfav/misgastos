@@ -5,6 +5,8 @@ export interface ExportMovement {
   kind: "income" | "expense" | "transfer";
   id: string;
   amount: string;
+  funding_type: "available" | "external" | null;
+  external_source: string | null;
   origin: string;
   destination: string;
   category: string | null;
@@ -81,6 +83,7 @@ export interface DataExport {
   budgets: ExportBudget[];
   categories: ExportCatalogItem[];
   payment_methods: ExportCatalogItem[];
+  external_sources: ExportCatalogItem[];
 }
 
 export async function readDataExport(startDate: string | null, endDate: string | null) {
@@ -95,7 +98,7 @@ export async function readDataExport(startDate: string | null, endDate: string |
 export const csvColumns = [
   "fecha", "clase", "tipo", "importe", "moneda", "origen", "destino",
   "categoria", "metodo_pago", "comercio", "descripcion", "nota",
-  "recurrente", "periodo_inicio", "periodo_fin", "periodo_estado", "referencia_id",
+  "recurrente", "periodo_inicio", "periodo_fin", "periodo_estado", "referencia_id", "origen_gasto", "origen_externo",
 ] as const;
 
 type CsvColumn = typeof csvColumns[number];
@@ -152,6 +155,8 @@ export function exportHistoryRows(data: DataExport, rangeKind: ExportRangeKind, 
     importe: row.amount,
     moneda: data.settings.currency,
     origen: row.origin,
+    origen_gasto: row.kind === "expense" ? row.funding_type === "external" ? "Externo" : "Disponible" : "",
+    origen_externo: row.external_source ?? "",
     destino: row.destination,
     categoria: row.category ?? "",
     metodo_pago: row.payment_method ?? "",
@@ -174,6 +179,8 @@ export function exportHistoryRows(data: DataExport, rangeKind: ExportRangeKind, 
       importe: row.amount,
       moneda: data.settings.currency,
       origen: "",
+      origen_gasto: "",
+      origen_externo: "",
       destino: row.account_name,
       categoria: "",
       metodo_pago: "",
@@ -234,7 +241,7 @@ function sheet(name: string, headers: string[], rows: ExcelValue[][], widths: nu
   return { sheet: name, data: [header(headers), ...rows], columns: widths.map((width) => ({ width })) };
 }
 
-const historyWidths = [12, 14, 24, 14, 10, 20, 20, 20, 20, 20, 28, 28, 12, 14, 14, 16, 38];
+const historyWidths = [12, 14, 24, 14, 10, 20, 20, 20, 20, 20, 28, 28, 12, 14, 14, 16, 38, 20, 24];
 
 export async function downloadHistoryXlsx(
   data: DataExport,
@@ -259,6 +266,7 @@ export async function downloadCompleteXlsx(data: DataExport, fileName: string) {
     row.origin, row.destination, row.category, row.payment_method, row.merchant,
     row.description, row.note, row.kind === "expense" ? (row.is_recurring ? "Sí" : "No") : null,
     row.period_start, row.period_end, row.period_status === "open" ? "Abierto" : "Cerrado", row.id,
+    row.kind === "expense" ? row.funding_type === "external" ? "Externo" : "Disponible" : null, row.external_source,
   ]);
   const balanceRows = data.balances.map((row) => [
     row.date, balanceType(data, row, "all"),
@@ -274,12 +282,13 @@ export async function downloadCompleteXlsx(data: DataExport, fileName: string) {
     "Categoría", budget.period_start, budget.period_end, budget.category, amount(budget.amount), data.settings.currency,
   ]);
   await writeXlsxFile([
-    sheet("Movimientos", ["Fecha", "Tipo", "Importe", "Moneda", "Origen", "Destino", "Categoría", "Método de pago", "Comercio", "Descripción", "Nota", "Recurrente", "Período inicio", "Período fin", "Estado período", "Referencia"], movementRows, [12, 16, 14, 10, 22, 22, 20, 20, 20, 28, 28, 12, 14, 14, 16, 38]),
+    sheet("Movimientos", ["Fecha", "Tipo", "Importe", "Moneda", "Origen", "Destino", "Categoría", "Método de pago", "Comercio", "Descripción", "Nota", "Recurrente", "Período inicio", "Período fin", "Estado período", "Referencia", "Origen del gasto", "Origen externo"], movementRows, [12, 16, 14, 10, 22, 22, 20, 20, 20, 28, 28, 12, 14, 14, 16, 38, 20, 24]),
     sheet("Saldos", ["Fecha", "Tipo", "Ámbito", "Cuenta", "Importe", "Moneda", "Período inicio", "Período fin", "Estado período"], balanceRows, [12, 16, 14, 24, 14, 10, 14, 14, 16]),
     sheet("Cuentas de ahorro", ["Nombre", "Fecha de inicio", "Saldo inicial", "Estado", "Saldo actual", "Moneda", "Versión"], data.savings_accounts.map((row) => [row.name, row.start_date, amount(row.opening_balance), active(row.is_active), amount(row.current_balance), data.settings.currency, row.version]), [24, 16, 16, 12, 16, 10, 10]),
     sheet("Períodos", ["Tipo", "Inicio", "Fin", "Estado", "Saldo inicial", "Saldo final", "Presupuesto general", "Moneda", "Cerrado en"], data.periods.map((row) => [periodModes[row.mode] ?? row.mode, row.start_date, row.end_date, row.status === "open" ? "Abierto" : "Cerrado", amount(row.opening_balance), amount(row.closing_balance), amount(row.general_budget), data.settings.currency, row.closed_at]), [18, 14, 14, 12, 16, 16, 20, 10, 24]),
     sheet("Presupuestos", ["Tipo", "Período inicio", "Período fin", "Categoría", "Importe", "Moneda"], budgetRows, [14, 16, 16, 24, 16, 10]),
     sheet("Categorías", ["Nombre", "Estado", "Versión"], data.categories.map((row) => [row.name, active(row.is_active), row.version]), [28, 14, 10]),
+    sheet("Orígenes externos", ["Nombre", "Estado", "Versión"], data.external_sources.map((row) => [row.name, active(row.is_active), row.version]), [28, 14, 10]),
     sheet("Métodos de pago", ["Nombre", "Estado", "Versión"], data.payment_methods.map((row) => [row.name, active(row.is_active), row.version]), [28, 14, 10]),
     sheet("Configuración", ["Campo", "Valor"], [["Moneda", data.settings.currency], ["Zona horaria", data.settings.timezone], ["Exportado a fecha", data.range.as_of_date]], [24, 32]),
   ]).toFile(fileName);
