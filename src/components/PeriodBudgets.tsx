@@ -2,53 +2,11 @@ import { FundingBreakdown } from "./FundingBreakdown";
 import { useState } from "react";
 import { useSetup } from "../hooks/useSetup";
 import { useSubmit } from "../hooks/useSubmit";
-import { isStaleData } from "../lib/errors";
 import { formatMoney, validateMoney } from "../lib/money";
 import { periodError, periodMutation, type BudgetPeriod, type BudgetUsage } from "../lib/periods";
 import { refreshFinancialData } from "../lib/refresh";
 import type { CatalogItem } from "../types/movements";
 import { ErrorMessage } from "./Feedback";
-
-function useBudgetMutation(onMessage: (text: string) => void) {
-  const state = useSubmit(periodError);
-  const save = (rpc: Parameters<typeof periodMutation>[0], parameters: Record<string, unknown>) => {
-    void state.submit(async () => {
-      try { await periodMutation(rpc, parameters); }
-      catch (failure) {
-        if (isStaleData(failure) || (failure as { code?: string }).code === "23505") {
-          onMessage("Los datos han cambiado. Recargando; revisa el presupuesto actual y vuelve a intentarlo.");
-          refreshFinancialData();
-        }
-        throw failure;
-      }
-      onMessage("Presupuesto actualizado. El disponible no cambia.");
-      refreshFinancialData();
-    });
-  };
-  return { ...state, save };
-}
-
-export function GeneralBudget({ period, onMessage }: { period: BudgetPeriod; onMessage: (text: string) => void }) {
-  const { settings } = useSetup();
-  const [amount, setAmount] = useState(period.general_budget ?? "");
-  const { busy, error, setError, save } = useBudgetMutation(onMessage);
-  return <section className="period-section">
-    <p>Es planificación de gastos; no modifica el dinero disponible. Vacío significa sin presupuesto. 0 es un presupuesto válido.</p>
-    <ErrorMessage message={error} />
-    <form onSubmit={(e) => {
-      e.preventDefault();
-      try {
-        const value = validateMoney(amount, { optional: true });
-        save("set_general_budget", { p_period_id: period.id, p_general_budget: value, p_expected_version: period.version });
-      } catch (failure) { setError((failure as Error).message); }
-    }}><fieldset disabled={busy}>
-      <label>Presupuesto ({settings!.currency})<input inputMode="decimal" value={amount} placeholder="Sin presupuesto" onChange={(e) => setAmount(e.target.value)} /></label>
-      <div className="form-actions"><button type="submit">{busy ? "Guardando…" : "Guardar presupuesto"}</button>
-        {period.general_budget !== null && <button type="button" className="button-secondary" onClick={() => save("set_general_budget", { p_period_id: period.id, p_general_budget: null, p_expected_version: period.version })}>Quitar presupuesto</button>}
-      </div>
-    </fieldset></form>
-  </section>;
-}
 
 // La RPC entrega gasto y restante. Solo la proporción visual se calcula aquí.
 function usagePercent(row: BudgetUsage) {

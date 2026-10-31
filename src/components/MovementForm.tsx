@@ -170,12 +170,12 @@ export function MovementForm({
         </div>
         {kind === "expense" && (
           <>
-            <label>Origen del gasto
+            {refs.external_sources.length > 0 && <label>Origen del gasto
               <select value={draft.funding} onChange={(e) => set("funding", e.target.value as MovementDraft["funding"])}>
                 <option value="available">Disponible</option><option value="external">Externo</option>
               </select>
               <small>{draft.funding === "available" ? "Sale de tu dinero disponible en MisGastos." : "Cuenta como gasto y para tus presupuestos, pero no reduce Disponible."}</small>
-            </label>
+            </label>}
             {draft.funding === "external" && <>
               <label>Origen externo
                 <select required value={draft.externalSource} onChange={(e) => set("externalSource", e.target.value)}>

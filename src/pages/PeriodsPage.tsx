@@ -1,9 +1,11 @@
+import { FundingBudgetsForm } from "../components/FundingBudgetsForm";
+import { HistoricalFundingBudgets } from "../components/HistoricalFundingBudgets";
 import { FundingBreakdown } from "../components/FundingBreakdown";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { ErrorMessage, Loading } from "../components/Feedback";
 import { AdvancePeriodForm } from "../components/AdvancePeriodForm";
-import { CategoryBudgets, GeneralBudget, HistoricalCategoryBudgets } from "../components/PeriodBudgets";
+import { CategoryBudgets, HistoricalCategoryBudgets } from "../components/PeriodBudgets";
 import { useRemote } from "../hooks/useRemote";
 import { useSetup } from "../hooks/useSetup";
 import { formatDate } from "../lib/dates";
@@ -23,7 +25,7 @@ function Accordion({ title, children, initiallyOpen = false }: { title: string; 
     <div className="accordion-content">{children}</div>
   </details>;
 }
-function PeriodFacts({ period }: { period: BudgetPeriod }) {
+function PeriodFacts({ period, budgetTotal }: { period: BudgetPeriod; budgetTotal: Money | null }) {
   const { settings } = useSetup();
   return <dl className="budget-facts">
     <div><dt>Tipo</dt><dd>{periodLabels[period.mode]}</dd></div>
@@ -31,7 +33,7 @@ function PeriodFacts({ period }: { period: BudgetPeriod }) {
     <div><dt>Estado</dt><dd>{period.status === "open" ? "Abierto" : "Cerrado"}</dd></div>
     <div><dt>Saldo inicial</dt><dd>{formatMoney(period.opening_balance, settings!.currency)}</dd></div>
     {period.status === "closed" && <div><dt>Saldo final</dt><dd>{formatMoney(period.closing_balance, settings!.currency)}</dd></div>}
-    <div><dt>Presupuesto general</dt><dd>{period.general_budget === null ? "Sin presupuesto" : formatMoney(period.general_budget, settings!.currency)}</dd></div>
+    <div><dt>Presupuesto total</dt><dd>{budgetTotal === null ? "Sin presupuesto" : formatMoney(budgetTotal, settings!.currency)}</dd></div>
   </dl>;
 }
 function Summary({ summary }: { summary: PeriodSummary }) {
@@ -39,7 +41,7 @@ function Summary({ summary }: { summary: PeriodSummary }) {
   const amounts: [string, Money | null][] = [
     [summary.period.status === "closed" ? "Disponible al cierre" : "Disponible actual", summary.available],
     ["Ingresos", summary.income_total], ["Gastos", summary.expenses_total],
-    ["Presupuesto general", summary.general_budget], ["Restante del presupuesto general", summary.general_budget_remaining],
+    ["Presupuesto total", summary.general_budget], ["Restante del presupuesto total", summary.general_budget_remaining],
     ["Ingresos a disponible", summary.income_to_available], ["Ingresos a ahorro", summary.income_to_savings],
     ["Transferencias de disponible a ahorro", summary.transfer_to_savings_total], ["Transferencias de ahorro a disponible", summary.transfer_from_savings_total],
   ];
@@ -75,7 +77,7 @@ function CurrentPeriods() {
   const [success, setSuccess] = useState<BudgetPeriod | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); window.scrollTo(0, 0); }, []);
-  const current = data?.current;
+  const current = data?.detail?.summary.period ?? data?.current;
   const historical = data?.periods.filter((period) => period.status === "closed") ?? [];
   const editable = current?.status === "open" && data?.detail?.summary.period.status === "open";
   return <div className="periods-page">
@@ -87,14 +89,14 @@ function CurrentPeriods() {
     {loading && !data && <Loading />}
     {loading && data && <p role="status">Actualizando períodos…</p>}
     {data && <fieldset disabled={loading || !!error} className="period-layout">
-      {current ? <section className="card"><h2>Período actual</h2><PeriodFacts period={current} /></section>
+      {current ? <section className="card"><h2>Período actual</h2><PeriodFacts period={current} budgetTotal={data.detail?.summary.general_budget ?? null} /></section>
         : <section className="card"><h2>No hay un período abierto</h2><p>Puedes consultar el historial de períodos cerrados.</p></section>}
       <div className="card period-accordions">
         <Accordion title="Resumen del período">{data.detail ? <Summary summary={data.detail.summary} /> : <p>No hay un período abierto.</p>}</Accordion>
         <Accordion title="Cerrar período y abrir el siguiente">
           {success ? <AdvanceSuccess period={success} /> : current && editable ? <AdvancePeriodForm key={`${current.id}:${current.version}`} period={current} onMessage={setMessage} onAdvanced={setSuccess} /> : <p>No hay un período abierto que cerrar.</p>}
         </Accordion>
-        <Accordion title="Presupuesto general">{current && editable ? <GeneralBudget key={`${current.id}:${current.version}`} period={current} onMessage={setMessage} /> : <p>No hay un período abierto editable.</p>}</Accordion>
+        <Accordion title={data.detail?.summary.has_external_sources ? "Presupuestos por origen" : "Presupuesto"}>{current && editable && data.detail ? <FundingBudgetsForm key={`${current.id}:${current.version}:${JSON.stringify(data.detail.summary.funding_budgets)}`} summary={data.detail.summary} onMessage={setMessage} /> : <p>No hay un período abierto editable.</p>}</Accordion>
         <Accordion title="Presupuestos por categoría">{current && editable && data.detail ? <CategoryBudgets key={`${current.id}:${JSON.stringify(data.detail.usage)}:${JSON.stringify(data.categories)}`} period={current} rows={data.detail.usage} categories={data.categories} onMessage={setMessage} /> : <p>No hay un período abierto editable.</p>}</Accordion>
         <Accordion title="Historial de períodos" initiallyOpen={location.state?.showHistory === true}>
           {historical.length ? <ul className="period-history">{historical.map((period) => <li key={period.id}>
@@ -109,6 +111,7 @@ function CurrentPeriods() {
   </div>;
 }
 function HistoricalPeriod({ id }: { id: string }) {
+  const { settings } = useSetup();
   const load = useCallback(() => readPeriodDetail(id), [id]);
   const { data, error, loading, reload } = useRemote(load);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -121,7 +124,8 @@ function HistoricalPeriod({ id }: { id: string }) {
     {loading && <Loading />}
     {!loading && data && period && !error && period.status === "closed" && <>
       <h1 ref={heading} tabIndex={-1}>{periodRange(period)}</h1>
-      <section className="card"><PeriodFacts period={period} /><h2>Resumen</h2><Summary summary={data.summary} /></section>
+      <section className="card"><PeriodFacts period={period} budgetTotal={data.summary.general_budget} /><h2>Resumen</h2><Summary summary={data.summary} /></section>
+      <HistoricalFundingBudgets summary={data.summary} currency={settings!.currency} />
       <section className="card"><HistoricalCategoryBudgets rows={data.usage} /></section>
       <p className="muted">Este período está cerrado y no puede modificarse.</p>
     </>}

@@ -98,7 +98,7 @@ function CatalogRow({
         <div className="delete-confirm">
           <p><strong>{item.has_history ? "Borrar" : "Eliminar"} {kind === "category" ? "categoría" : kind === "external_expense_source" ? "origen externo" : "método"}</strong></p>
           <p>{item.has_history
-            ? `Dejará de aparecer en Ajustes y en los nuevos gastos. ${kind === "category" ? "Los gastos y presupuestos" : "Los gastos"} anteriores conservarán su nombre.`
+            ? `Dejará de aparecer en Ajustes y en los nuevos gastos. ${kind === "payment_method" ? "Los gastos" : "Los gastos y presupuestos"} anteriores conservarán su nombre.`
             : "Nunca se ha utilizado y se eliminará definitivamente. Esta acción no se puede deshacer."}</p>
           <div className="form-actions">
             <button className="button-danger" disabled={busy} onClick={() => mutate("delete")}>

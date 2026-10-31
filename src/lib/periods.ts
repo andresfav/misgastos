@@ -1,7 +1,7 @@
 import { client } from "./supabase";
 import { friendlyError } from "./errors";
 import { periodDates } from "./dates";
-import type { FundingBreakdown, Money, Period, PeriodMode } from "../types/finance";
+import type { BudgetModel, FundingBreakdown, FundingBudgetUsage, Money, Period, PeriodMode } from "../types/finance";
 
 export const periodLabels: Record<PeriodMode, string> = {
   monthly: "Mensual", annual: "Anual", custom: "Personalizado", between_paydays: "Entre cobros",
@@ -10,7 +10,9 @@ export interface BudgetPeriod extends Period {
   version: number;
   opening_balance: Money;
   closing_balance: Money | null;
-  general_budget: string | null;
+  budget_model: BudgetModel;
+  // El valor físico general_budget no forma parte del contrato de UI.
+  // Los totales y las asignaciones se leen exclusivamente del resumen.
 }
 export interface PeriodSummary {
   as_of_date: string;
@@ -18,7 +20,13 @@ export interface PeriodSummary {
   available: Money;
   income_total: Money;
   expenses_total: Money;
+  expenses_available_total: Money;
+  has_external_sources: boolean;
+  funding_budgets: FundingBudgetUsage[];
+  budget_model: BudgetModel;
+  legacy_general_budget: string | null;
   expenses_funding_breakdown?: FundingBreakdown[];
+  // Total canónico del período; nunca el componente físico de Disponible.
   general_budget: Money | null;
   general_budget_remaining: Money | null;
   income_to_available: Money;
@@ -41,7 +49,7 @@ export async function readPeriods() {
   const rows: BudgetPeriod[] = [];
   for (let offset = 0; ; offset += 500) {
     const { data, error } = await client().from("budget_periods")
-      .select("id,mode,start_date,end_date,status,version,opening_balance::text,closing_balance::text,general_budget::text")
+      .select("id,mode,start_date,end_date,status,version,opening_balance::text,closing_balance::text,budget_model")
       .order("start_date", { ascending: false }).order("id").range(offset, offset + 499);
     if (error) throw error;
     rows.push(...data as BudgetPeriod[]);
@@ -73,7 +81,7 @@ export async function readPeriodDetail(id: string) {
   return { summary: summary.data as PeriodSummary, usage: rows };
 }
 export async function periodMutation(
-  rpc: "advance_period" | "set_general_budget" | "create_category_budget" | "update_category_budget" | "delete_category_budget",
+  rpc: "advance_period" | "set_funding_budgets" | "create_category_budget" | "update_category_budget" | "delete_category_budget",
   parameters: Record<string, unknown>,
 ) {
   const { data, error } = await client().rpc(rpc, parameters);
@@ -101,6 +109,8 @@ export function periodError(error: unknown) {
     if (/movimientos fuera/i.test(message)) return "El cierre dejaría movimientos fuera del período. Revisa sus fechas o elige un inicio posterior para el siguiente período.";
     if (/solapa|historia|posterior/i.test(message)) return "El nuevo período debe comenzar después del actual y de todos los períodos anteriores.";
     if (/mes natural|año natural/i.test(message)) return "Mensual y anual deben coincidir con el mes o año natural actual. Elige Personalizado si necesitas otras fechas.";
+    if (/Presupuesto distribuido/i.test(message)) return "Actualiza la aplicación para editar la distribución de presupuestos.";
+    if (/Origen externo/i.test(message)) return "El origen ya no está disponible. Actualiza los datos y revisa sus presupuestos.";
     if (/categoría/i.test(message)) return "La categoría ya no está activa. Actualiza los datos y selecciona otra.";
     if (/presupuesto|amount/i.test(message)) return "Introduce un presupuesto igual o mayor que 0, con hasta dos decimales.";
     if (/Saldo de cierre/i.test(message)) return "El saldo de cierre supera el importe admitido por el sistema. No se puede avanzar el período.";

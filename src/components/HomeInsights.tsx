@@ -1,3 +1,5 @@
+import { BudgetDetail } from "./BudgetDetail";
+import { percentLabel } from "../lib/fundingBudgets";
 import { FundingBreakdown } from "./FundingBreakdown";
 import { lazy, Suspense, useCallback, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -10,8 +12,6 @@ import { ErrorMessage, Loading } from "./Feedback";
 const Evolution = lazy(() => import("./PeriodEvolution").then((module) => ({ default: module.Evolution })));
 
 const percentage = (spent: Money, budget: Money) => Number(budget) > 0 ? Number(spent) / Number(budget) * 100 : null;
-const percentLabel = (value: number) => `${new Intl.NumberFormat("es-ES", { maximumFractionDigits: 1 }).format(value)} %`;
-const positive = (value: Money) => String(value).replace(/^-/, "");
 
 function Accordion({ title, summary, children, deferContent = false }: { title: string; summary?: ReactNode; children: ReactNode; deferContent?: boolean }) {
   const [opened, setOpened] = useState(false);
@@ -25,25 +25,6 @@ function Accordion({ title, summary, children, deferContent = false }: { title: 
 function Progress({ value, label, exceeded = false }: { value: number; label: string; exceeded?: boolean }) {
   return <progress className={`budget-progress${exceeded ? " exceeded" : ""}`} max={100}
     value={Math.max(0, Math.min(100, value))} aria-label={label} aria-valuetext={label} />;
-}
-function BudgetDetail({ spent, budget, remaining, currency }: { spent: Money; budget: Money; remaining: Money | null; currency: Currency }) {
-  const used = percentage(spent, budget);
-  const exceeded = remaining !== null && Number(remaining) < 0;
-  const money = (amount: Money | null) => formatMoney(amount, currency);
-  return <div className="home-budget-detail">
-    <dl className="home-budget-facts">
-      <div><dt>Gastado</dt><dd>{money(spent)} / {money(budget)}</dd>
-        <small>{used === null ? "Presupuesto fijado en cero" : `${percentLabel(used)} utilizado`}</small></div>
-    </dl>
-    <Progress value={used ?? (Number(spent) > 0 ? 100 : 0)} exceeded={exceeded}
-      label={`${money(spent)} gastados de ${money(budget)}`} />
-    <dl className="home-budget-facts">
-      <div><dt>{exceeded ? "Presupuesto excedido" : "Restante del presupuesto"}</dt>
-        <dd className={exceeded ? "danger-text" : ""}>{money(exceeded ? positive(remaining!) : remaining)}</dd>
-        {!exceeded && remaining !== null && Number(budget) > 0 && <small>{percentLabel(Number(remaining) / Number(budget) * 100)} restante</small>}
-      </div>
-    </dl>
-  </div>;
 }
 function PeriodInsights({ data, currency }: { data: FinancialState; currency: Currency }) {
   const periodId = data.current_period!.id;
@@ -133,15 +114,30 @@ export function HomeInsights({ data, currency }: { data: FinancialState; currenc
   const spent = data.expenses_total ?? "0";
   const used = data.general_budget === null ? null : percentage(spent, data.general_budget);
   const budgetSummary = !data.current_period ? "Sin período abierto" : data.general_budget === null ? "Sin configurar"
-    : used === null ? "— %" : percentLabel(used);
+    : used === null ? "Presupuesto cero" : percentLabel(used);
   return <div className="home-accordions">
-    <Accordion title="Presupuesto" summary={budgetSummary}>
-      {data.current_period && data.general_budget !== null ? <>
+    <Accordion title={data.has_external_sources ? "Presupuesto total" : "Presupuesto"} summary={budgetSummary}>
+      {data.current_period ? <>
         <BudgetDetail spent={spent} budget={data.general_budget} remaining={data.general_budget_remaining} currency={currency} />
         <p className="home-note">El presupuesto es tu límite de gasto; no cambia tu dinero disponible.</p>
-      </> : <p>{data.current_period ? "No has fijado un presupuesto para este período." : "No hay un período abierto."}</p>}
+      </> : <p>No hay un período abierto.</p>}
       <Link className="text-link" to="/ajustes/periodos">Configurar →</Link>
     </Accordion>
+    {data.current_period && data.has_external_sources && <>
+      {data.budget_model === "by_origin" && <Accordion title="Presupuestos por origen">
+        <div className="funding-budget-cards">{data.funding_budgets.map((row) => <section className="funding-budget-card" key={row.external_source_id ?? "available"}>
+          <h3>{row.name}{!row.is_active && <small> · Inactivo</small>}</h3>
+          <BudgetDetail spent={row.spent} budget={row.budget_amount} remaining={row.remaining} currency={currency} />
+        </section>)}</div>
+        <Link className="text-link" to="/ajustes/periodos">Configurar presupuestos →</Link>
+      </Accordion>}
+      <Accordion title="Gastos por origen">
+        <dl className="budget-facts">{data.funding_budgets.map((row) => <div key={row.external_source_id ?? "available"}>
+          <dt>{row.name}{!row.is_active && <small> · Inactivo</small>}</dt><dd>{formatMoney(row.spent, currency)}</dd>
+        </div>)}</dl>
+        <p className="funding-budget-total">Total de gastos: <strong>{formatMoney(data.expenses_total, currency)}</strong></p>
+      </Accordion>
+    </>}
     <SavingsInsight data={data} currency={currency} />
     {data.current_period ? <PeriodInsights key={data.current_period.id} data={data} currency={currency} /> : <>
       <Accordion title="Presupuesto por categoría"><Link className="text-link" to="/ajustes/periodos">Gestionar períodos →</Link></Accordion>

@@ -532,3 +532,134 @@ Despliegue: **migración 011 → deploy del frontend**. El frontend previo sigue
 operando mediante las firmas antiguas; el nuevo requiere la tabla y RPC de 011.
 La migración notifica a PostgREST para recargar su esquema. Consultar
 [EXTERNAL_EXPENSES_TESTING.md](EXTERNAL_EXPENSES_TESTING.md) antes de producción.
+
+
+## 012 — Presupuestos distribuidos por origen
+
+### Dos significados explícitos, sin reinterpretar la historia
+
+`budget_periods.budget_model` distingue `legacy_total` de `by_origin`. Al añadir
+la columna, **todos los períodos existentes**, abiertos y cerrados, quedan en
+`legacy_total`; después se cambia el default de inserción a `by_origin` para los
+períodos nuevos. No se actualizan importes, movimientos, versiones ni timestamps
+anteriores. La única adición a las filas existentes es esta clasificación.
+
+- En `legacy_total`, el campo físico `budget_periods.general_budget` conserva su
+  significado original: límite para **todos** los gastos, incluidos los externos.
+  No constituye una asignación a Disponible. No se generan asignaciones por origen
+  ni siquiera para períodos históricos sin gastos externos.
+- En `by_origin`, ese campo físico representa el componente Disponible, por
+  compatibilidad de esquema. El total es la suma de este y las asignaciones
+  externas. No existe un total editable adicional.
+
+Un período abierto anterior conserva su modelo general hasta que el usuario
+guarda explícitamente la distribución mediante `set_funding_budgets`. El editor
+propone el importe anterior para Disponible y avisa del cambio de significado;
+el usuario puede ajustarlo. Si conserva 2.000 y añade 500 a Itaú, el total es
+2.500. La conversión se confirma junto con los importes y el recibo idempotente;
+si falla, permanece el modelo anterior. Un período cerrado nunca se convierte.
+
+### Asignaciones y concurrencia
+
+`period_external_source_budgets` guarda `id`, `user_id`, `period_id`,
+`external_source_id`, `amount`, `created_at`, `updated_at`. Hay unicidad por
+usuario/período/origen, importe no negativo y FK compuestas con el mismo
+propietario. RLS permite SELECT propio, sin DML directo de clientes. La versión
+del conjunto es `budget_periods.version`.
+
+`private.period_funding_allocations` devuelve asignaciones únicamente para
+`by_origin`. `private.period_budget_total` devuelve el límite original para
+`legacy_total` y la suma de asignaciones para `by_origin`. NULL significa sin
+presupuesto; cero es un límite explícito. Los presupuestos de categoría son otra
+dimensión: no se suman al total y consumen todos los gastos de su categoría.
+
+`set_funding_budgets(p_period_id, p_available_budget, p_external_budgets,
+p_expected_version, p_request_id)` adquiere el lock común, normaliza entradas y
+ordena orígenes para el hash, reutiliza `movement_retry`, exige READ COMMITTED,
+período abierto y versión vigente. Guarda todo, cambia el modelo a `by_origin`,
+incrementa una vez la versión y registra el recibo en la misma transacción.
+La lista externa es un patch: NULL quita una asignación, cero crea un límite
+cero, los orígenes omitidos se conservan. Un retry devuelve el resultado original
+incluso después del cierre, sin restaurar importes posteriores.
+
+Una fuente inactiva puede conservar/corregir/quitar una asignación existente en
+un período abierto, pero no recibir una nueva. Usarla solo en presupuestos
+cuenta como historial para soft-delete. Reset elimina asignaciones antes de
+fuentes y períodos, sin cambiar Auth.
+
+### Protección de la RPC antigua
+
+El frontend 011 lee `general_budget::text` directamente de `budget_periods` y lo
+edita mediante `set_general_budget` con la etiqueta «Presupuesto». No conoce las
+partes externas, aunque sus resúmenes puedan mostrar el total de 012. Por eso
+no es seguro inferir qué quiso decir el usuario con un importe de un cliente
+antiguo ni restar automáticamente los externos para reinterpretarlo.
+
+`set_general_budget` conserva su firma, lock y control de versión, pero **rechaza
+sin efectos cualquier guardado si el período tiene asignaciones externas**,
+incluidas asignaciones de cero y peticiones NULL. Con Disponible 2.000 y externo
+500, enviar 2.600 no produce 3.100 ni modifica ninguna parte o versión. Debe
+actualizarse el frontend y usarse la RPC explícita por origen.
+
+Sin asignaciones externas la RPC sigue funcionando, porque el total y el único
+importe editable coinciden: en `legacy_total` modifica el límite general y
+conserva el modelo; en `by_origin` modifica el único componente. No se convierte
+un período legacy por una llamada antigua. La comprobación de versión precede
+al bloqueo de compatibilidad; un editor obsoleto sigue recibiendo `40001`.
+
+Las firmas e idempotencia de creación/transición de períodos permanecen. Sus
+nuevos INSERT usan `by_origin`; `p_general_budget` inicializa su único componente,
+y NULL no copia presupuestos previos. Cerrar un período legacy conserva su
+modelo, importe y significado.
+
+### Contrato de lectura y consumidores
+
+`period.general_budget` es el valor físico, cuyo significado depende del modelo.
+**No se usa para mostrar un total ni para editar desde el frontend nuevo**:
+se elimina del tipo `BudgetPeriod` y de la consulta `readPeriods`.
+
+`general_budget` **del resumen** siempre es el total canónico del período,
+histórico o derivado. `general_budget_spent` incluye todos los gastos y
+`general_budget_remaining` resta ese consumo total. `budget_model` declara la
+semántica, y `legacy_general_budget` transporta en texto el total heredado para
+la propuesta de conversión del editor de un período abierto.
+
+`private.period_funding_usage_at` reutiliza las asignaciones canónicas y el
+desglose de gastos de 011. En legacy las filas de gasto pueden mostrarse, pero
+`budget_amount` y `remaining` son NULL: no se inventan límites de origen.
+En by_origin se muestran límites y consumos propios. La suma de gasto por
+origen coincide con `expenses_total`.
+
+Consumidores auditados:
+
+- Inicio, detalle del período y evolución: total canónico del resumen.
+- Editor de distribución: asignaciones exactas en texto; en un legacy abierto,
+  propuesta separada a partir de `legacy_general_budget`, con aviso al guardar.
+- Historial: presupuesto general contra todos los gastos. Solo períodos
+  `by_origin` muestran tarjetas de límites por origen.
+- Lista de períodos y navegación: metadatos y saldos, sin leer el campo físico
+  de presupuesto. Onboarding inicializa el presupuesto; avanzar envía NULL.
+- Exportación: total canónico y modelo explícito, sin asignaciones históricas
+  ficticias a Disponible.
+
+`expenses_available_total` alimenta «Gasto» de Inicio. Estadísticas, categorías,
+evolución y presupuesto total conservan todo el consumo. Los desgloses por origen
+se ocultan para usuarios sin fuentes/historial externo. Los porcentajes son de
+presentación: se muestra el real, con barra hasta 100 %, exceso en rojo, y se
+distinguen presupuesto cero y ausencia de límite. El total del borrador se suma
+en céntimos; los totales guardados y saldos proceden del backend.
+
+### Exportación y despliegue
+
+`get_data_export.periods[].general_budget` siempre es total. Añade `budget_model`
+y `available_budget`: este último es NULL en legacy, y el componente Disponible
+en by_origin. `funding_budgets` exporta solo asignaciones reales de by_origin.
+XLSX mantiene el presupuesto histórico en sus hojas de totales/períodos, indica
+«General histórico» o «Por origen» y añade las asignaciones reales en
+«Presupuestos por origen». CSV/XLSX de historial mantiene el contrato de 011.
+
+Orden seguro: **migración 012 → recarga PostgREST → deploy frontend**. Hasta que
+haya asignaciones externas, la edición antigua sigue funcionando. Después,
+los clientes antiguos deben actualizarse para editar presupuestos distribuidos;
+sus peticiones ambiguas se rechazan conservando los datos. Consultar
+[FUNDING_BUDGETS_TESTING.md](FUNDING_BUDGETS_TESTING.md).

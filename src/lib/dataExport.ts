@@ -1,4 +1,5 @@
 import { client } from "./supabase";
+import type { BudgetModel } from "../types/finance";
 
 export interface ExportMovement {
   date: string;
@@ -43,6 +44,8 @@ interface ExportPeriod {
   opening_balance: string;
   closing_balance: string | null;
   general_budget: string | null;
+  budget_model: BudgetModel;
+  available_budget: string | null;
   closed_at: string | null;
   version: number;
 }
@@ -66,6 +69,18 @@ interface ExportBudget {
   amount: string;
 }
 
+interface ExportFundingBudget {
+  period_id: string;
+  period_start: string;
+  period_end: string | null;
+  period_status: "open" | "closed";
+  funding_type: "available" | "external";
+  external_source_id: string | null;
+  name: string;
+  is_active: boolean;
+  amount: string;
+}
+
 interface ExportCatalogItem {
   id: string;
   name: string;
@@ -81,6 +96,7 @@ export interface DataExport {
   savings_accounts: ExportSavingsAccount[];
   periods: ExportPeriod[];
   budgets: ExportBudget[];
+  funding_budgets: ExportFundingBudget[];
   categories: ExportCatalogItem[];
   payment_methods: ExportCatalogItem[];
   external_sources: ExportCatalogItem[];
@@ -259,8 +275,7 @@ export async function downloadHistoryXlsx(
   }).toFile(fileName);
 }
 
-export async function downloadCompleteXlsx(data: DataExport, fileName: string) {
-  const { default: writeXlsxFile } = await import("write-excel-file/browser");
+export function completeXlsxSheets(data: DataExport) {
   const movementRows = data.movements.map((row) => [
     row.date, movementTypes[row.kind], amount(row.amount), data.settings.currency,
     row.origin, row.destination, row.category, row.payment_method, row.merchant,
@@ -276,20 +291,28 @@ export async function downloadCompleteXlsx(data: DataExport, fileName: string) {
   ]);
   const budgetRows: ExcelValue[][] = [];
   for (const period of data.periods) if (period.general_budget !== null) budgetRows.push([
-    "General", period.start_date, period.end_date, null, amount(period.general_budget), data.settings.currency,
+    "Total", period.start_date, period.end_date, null, amount(period.general_budget), data.settings.currency,
   ]);
   for (const budget of data.budgets) budgetRows.push([
     "Categoría", budget.period_start, budget.period_end, budget.category, amount(budget.amount), data.settings.currency,
   ]);
-  await writeXlsxFile([
+  return [
     sheet("Movimientos", ["Fecha", "Tipo", "Importe", "Moneda", "Origen", "Destino", "Categoría", "Método de pago", "Comercio", "Descripción", "Nota", "Recurrente", "Período inicio", "Período fin", "Estado período", "Referencia", "Origen del gasto", "Origen externo"], movementRows, [12, 16, 14, 10, 22, 22, 20, 20, 20, 28, 28, 12, 14, 14, 16, 38, 20, 24]),
     sheet("Saldos", ["Fecha", "Tipo", "Ámbito", "Cuenta", "Importe", "Moneda", "Período inicio", "Período fin", "Estado período"], balanceRows, [12, 16, 14, 24, 14, 10, 14, 14, 16]),
     sheet("Cuentas de ahorro", ["Nombre", "Fecha de inicio", "Saldo inicial", "Estado", "Saldo actual", "Moneda", "Versión"], data.savings_accounts.map((row) => [row.name, row.start_date, amount(row.opening_balance), active(row.is_active), amount(row.current_balance), data.settings.currency, row.version]), [24, 16, 16, 12, 16, 10, 10]),
-    sheet("Períodos", ["Tipo", "Inicio", "Fin", "Estado", "Saldo inicial", "Saldo final", "Presupuesto general", "Moneda", "Cerrado en"], data.periods.map((row) => [periodModes[row.mode] ?? row.mode, row.start_date, row.end_date, row.status === "open" ? "Abierto" : "Cerrado", amount(row.opening_balance), amount(row.closing_balance), amount(row.general_budget), data.settings.currency, row.closed_at]), [18, 14, 14, 12, 16, 16, 20, 10, 24]),
+    sheet("Períodos", ["Tipo", "Inicio", "Fin", "Estado", "Saldo inicial", "Saldo final", "Presupuesto general", "Moneda", "Cerrado en", "Modelo de presupuesto"], data.periods.map((row) => [periodModes[row.mode] ?? row.mode, row.start_date, row.end_date, row.status === "open" ? "Abierto" : "Cerrado", amount(row.opening_balance), amount(row.closing_balance), amount(row.general_budget), data.settings.currency, row.closed_at, row.budget_model === "legacy_total" ? "General histórico" : "Por origen"]), [18, 14, 14, 12, 16, 16, 20, 10, 24, 22]),
     sheet("Presupuestos", ["Tipo", "Período inicio", "Período fin", "Categoría", "Importe", "Moneda"], budgetRows, [14, 16, 16, 24, 16, 10]),
+    sheet("Presupuestos por origen", ["Período inicio", "Período fin", "Estado período", "Tipo de origen", "Origen", "Estado origen", "Importe", "Moneda", "Referencia origen"],
+      data.funding_budgets.map((row) => [row.period_start, row.period_end, row.period_status === "open" ? "Abierto" : "Cerrado", row.funding_type === "available" ? "Disponible" : "Externo", row.name, row.is_active ? "Activo" : "Inactivo", amount(row.amount), data.settings.currency, row.external_source_id]),
+      [16, 16, 16, 18, 24, 16, 16, 10, 38]),
     sheet("Categorías", ["Nombre", "Estado", "Versión"], data.categories.map((row) => [row.name, active(row.is_active), row.version]), [28, 14, 10]),
     sheet("Orígenes externos", ["Nombre", "Estado", "Versión"], data.external_sources.map((row) => [row.name, active(row.is_active), row.version]), [28, 14, 10]),
     sheet("Métodos de pago", ["Nombre", "Estado", "Versión"], data.payment_methods.map((row) => [row.name, active(row.is_active), row.version]), [28, 14, 10]),
     sheet("Configuración", ["Campo", "Valor"], [["Moneda", data.settings.currency], ["Zona horaria", data.settings.timezone], ["Exportado a fecha", data.range.as_of_date]], [24, 32]),
-  ]).toFile(fileName);
+  ];
+}
+
+export async function downloadCompleteXlsx(data: DataExport, fileName: string) {
+  const { default: writeXlsxFile } = await import("write-excel-file/browser");
+  await writeXlsxFile(completeXlsxSheets(data)).toFile(fileName);
 }

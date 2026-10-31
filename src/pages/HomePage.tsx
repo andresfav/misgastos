@@ -1,4 +1,3 @@
-import { FundingBreakdown } from "../components/FundingBreakdown";
 import { Link } from "react-router-dom";
 import { useRemote } from "../hooks/useRemote";
 import { readFinancialState } from "../lib/finance";
@@ -34,7 +33,7 @@ export function HomePage() {
           {data.available !== null && Number(data.available) < 0 &&
             <p className="negative-balance">Saldo negativo · El disponible está por debajo de cero.</p>}
           {data.current_period && <dl className="home-totals" aria-label="Totales del período">
-            <div><dt>Gastos</dt><dd>{money(data.expenses_total)}</dd></div>
+            <div><dt>Gasto</dt><dd>{money(data.expenses_available_total)}</dd></div>
             <div><dt>Ingresos</dt><dd>{money(data.income_total)}</dd></div>
           </dl>}
           <p className="home-note summary-date">
@@ -42,7 +41,6 @@ export function HomePage() {
             <small>Los ingresos incluyen los de ahorro.</small>
           </p>
         </section>
-        <FundingBreakdown rows={data.expenses_funding_breakdown} currency={settings!.currency} />
         <HomeInsights data={data} currency={settings!.currency} />
       </>}
     </div>

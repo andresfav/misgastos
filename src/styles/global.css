@@ -1011,8 +1011,8 @@ textarea:focus-visible {
 .budget-progress::-webkit-progress-bar { background: #e8eee8; }
 .budget-progress::-webkit-progress-value { background: var(--green); border-radius: 10px; }
 .budget-progress::-moz-progress-bar { background: var(--green); border-radius: 10px; }
-.budget-progress.exceeded::-webkit-progress-value { background: #9c5738; }
-.budget-progress.exceeded::-moz-progress-bar { background: #9c5738; }
+.budget-progress.exceeded::-webkit-progress-value { background: #9c3023; }
+.budget-progress.exceeded::-moz-progress-bar { background: #9c3023; }
 .home-note {
   font-size: 0.8rem;
   margin-bottom: 0;
@@ -1427,3 +1427,10 @@ button, .button { max-width: 100%; }
 
 .funding-breakdown { margin-block: .75rem; font-size: .9rem; }
 .funding-breakdown > summary { cursor: pointer; color: var(--muted); }
+
+.funding-budget-cards { display: grid; gap: 12px; }
+.funding-budget-card { padding: 16px; border: 1px solid var(--border); border-radius: 12px; min-width: 0; }
+.funding-budget-card h3 { margin: 0 0 12px; overflow-wrap: anywhere; }
+.budget-amounts { font-size: 1.1rem; overflow-wrap: anywhere; }
+.funding-budget-total { padding-block: 12px; border-top: 1px solid var(--border); }
+@media (min-width: 640px) { .funding-budget-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
